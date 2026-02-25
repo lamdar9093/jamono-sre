@@ -33,17 +33,17 @@ RÈGLES DE RÉPONSE :
   "severity": "low" | "medium" | "high",
   "component": "nom-du-deployment",
   "action_type": "PATCH_RESOURCES" | "PATCH_COMMAND" | "RESTART" | "NONE",
-  "suggested_change": {
-    "current": "valeur actuelle",
-    "new": "valeur proposée"
-  },
+"suggested_change": {
+    "current": "OBLIGATOIRE : copie exacte de la valeur actuelle lue dans le manifeste. Ne jamais mettre de texte explicatif ici.",
+    "new": "OBLIGATOIRE : nouvelle valeur exacte à appliquer. Ne jamais mettre de texte explicatif ici."
+},
   "justification": "phrase courte expliquant pourquoi",
   "requires_approval": true
 }
 </remediation_json>
 
-"Ne répète JAMAIS les données JSON brutes ou les logs complets dans ton explication. Utilise-les uniquement pour forger ton diagnostic. 
-Ta réponse doit être uniquement composée de phrases pour l'humain et du bloc <remediation_json>."
+Ne répète JAMAIS les données JSON brutes ou les logs complets dans ton explication. Utilise-les uniquement pour forger ton diagnostic.
+Ta réponse doit être uniquement composée de phrases pour l'humain et du bloc <remediation_json>.
 """
 
 k8s_agent_executor = create_react_agent(

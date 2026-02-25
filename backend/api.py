@@ -7,6 +7,11 @@ import re
 import json
 from main import run_sre_system
 
+from audit import init_audit_db, log_action, update_action_status, get_audit_log, get_rollback_snapshot
+
+# Initialisation de la DB au démarrage
+init_audit_db()
+
 app = FastAPI(title="SRE Agent API", version="1.0.0")
 
 app.add_middleware(
@@ -25,41 +30,129 @@ async def chat_endpoint(request: ChatRequest):
     t_id = request.thread_id or f"sess_{uuid.uuid4().hex[:6]}"
     
     try:
-        # 1. On récupère la réponse brute de l'agent
         full_response = run_sre_system(request.message, t_id)
         
-        # 2. Logique d'extraction du JSON de remédiation
         remediation_data = None
-        # On cherche ce qui est entre les balises <remediation_json>
         json_match = re.search(r"<remediation_json>(.*?)</remediation_json>", full_response, re.DOTALL)
         
         clean_explanation = full_response
         
         if json_match:
             try:
-                # On parse le JSON pour qu'il soit un objet Python propre
                 remediation_data = json.loads(json_match.group(1).strip())
-                # On retire le bloc JSON du texte pour ne pas l'afficher à l'utilisateur
                 clean_explanation = re.sub(r"<remediation_json>.*?</remediation_json>", "", full_response, flags=re.DOTALL).strip()
-                # On retire aussi le petit message "💡 En attente de validation" s'il est présent, 
-                # car le frontend affichera ses propres boutons.
                 clean_explanation = clean_explanation.replace("💡 En attente de validation (OUI/NON)...", "").strip()
             except Exception as json_err:
                 print(f"Erreur de parsing JSON: {json_err}")
 
-        # 3. On renvoie une réponse structurée
+        # Nettoyage du texte : on retire les blocs JSON bruts que l'agent laisse traîner
+        # Retire les listes JSON type [{"pod_name": ...}]
+        clean_explanation = re.sub(r'\[\{.*?\}\]', '', clean_explanation, flags=re.DOTALL).strip()
+        # Retire les objets JSON isolés type {"key": "value"}
+        clean_explanation = re.sub(r'\{\".*?\"\}', '', clean_explanation, flags=re.DOTALL).strip()
+        # Retire les lignes vides multiples
+        clean_explanation = re.sub(r'\n{3,}', '\n\n', clean_explanation).strip()
+
         return {
             "status": "success",
             "thread_id": t_id,
-            "response": clean_explanation, # Le texte pour le chat
-            "remediation": remediation_data, # L'objet pour créer les boutons/diffs
+            "response": clean_explanation,
+            "remediation": remediation_data,
             "has_action": remediation_data is not None
         }
 
     except Exception as e:
         print(f"API Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/pods")
+async def get_pods():
+    try:
+        from tools.k8s_core import list_pods_tool
+        result = list_pods_tool.invoke({"namespace": "default"})
+        return {"status": "success", "pods": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/pods/{pod_name}/logs")
+async def get_pod_logs(pod_name: str, namespace: str = "default"):
+    try:
+        from tools.k8s_core import get_pod_logs_tool
+        result = get_pod_logs_tool.invoke({"pod_name": pod_name, "namespace": namespace})
+        return {"status": "success", "logs": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/pods/{pod_name}/events")
+async def get_pod_events(pod_name: str, namespace: str = "default"):
+    try:
+        from tools.k8s_core import get_pod_events_tool
+        result = get_pod_events_tool.invoke({"pod_name": pod_name, "namespace": namespace})
+        return {"status": "success", "events": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    
+# Endpoint de confirmation de remédiation — enregistre dans l'audit avant d'exécuter
+class RemediationRequest(BaseModel):
+    pod_name: str
+    deployment_name: str
+    action_type: str
+    change_before: str
+    change_after: str
+    thread_id: Optional[str] = None
+
+@app.post("/remediation/confirm")
+async def confirm_remediation(req: RemediationRequest):
+    t_id = req.thread_id or f"sess_{uuid.uuid4().hex[:6]}"
+    
+    try:
+        # 1. Snapshot de l'état actuel avant le patch
+        from tools.k8s_core import get_pod_manifest_tool
+        snapshot = get_pod_manifest_tool.invoke({"pod_name": req.pod_name})
+        
+        # 2. Enregistrement dans l'audit log
+        action_id = log_action(
+            pod_name=req.pod_name,
+            action_type=req.action_type,
+            change_before=req.change_before,
+            change_after=req.change_after,
+            rollback_snapshot={"manifest": str(snapshot)}
+        )
+        
+        # 3. Exécution du patch via l'agent
+        full_response = run_sre_system(
+            f"OUI, applique le changement pour {req.deployment_name}. Change la mémoire à {req.change_after}.",
+            t_id
+        )
+        
+        # 4. Mise à jour du statut
+        update_action_status(action_id, "success")
+        
+        return {
+            "status": "success",
+            "action_id": action_id,
+            "message": f"Patch appliqué sur {req.deployment_name}",
+            "response": full_response
+        }
+    except Exception as e:
+        if 'action_id' in locals():
+            update_action_status(action_id, "failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint rollback
+@app.post("/remediation/{action_id}/rollback")
+async def rollback_remediation(action_id: int):
+    try:
+        snapshot = get_rollback_snapshot(action_id)
+        if not snapshot:
+            raise HTTPException(status_code=404, detail="Snapshot introuvable")
+        update_action_status(action_id, "rolled_back")
+        return {"status": "success", "message": "Rollback effectué", "snapshot": snapshot}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint audit log
+@app.get("/audit")
+async def get_audit():
+    return {"status": "success", "logs": get_audit_log()}

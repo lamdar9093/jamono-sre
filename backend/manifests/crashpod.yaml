@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: crashpod
+  namespace: default
+spec:
+  containers:
+  - name: crash
+    image: busybox
+    command: ["sh", "-c", "echo 'ERROR: Out of memory' && exit 137"]
+  restartPolicy: Never

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crash-app2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crash-app
+  template:
+    metadata:
+      labels:
+        app: crash-app
+    spec:
+      containers:
+      - name: crash-container
+        image: busybox
+        # Cette commande consomme de la RAM puis s'arrête pour simuler un OOM
+        command: ["sh", "-c", "sleep 5 && dd if=/dev/zero of=/dev/null bs=100M count=1"]
+        resources:
+          limits:
+            memory: "64Mi" # Trop bas, va causer un crash

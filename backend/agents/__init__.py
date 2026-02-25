@@ -1,0 +1,2 @@
+from .k8s_specialist import k8s_agent_executor as k8s_agent
+from .network_specialist import network_agent_executor as network_tools

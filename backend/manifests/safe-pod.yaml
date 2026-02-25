@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: safe-pod
+  labels:
+    app: watchdog
+spec:
+  containers:
+  - name: nginx-container
+    image: nginx:alpine  # Version ultra-légère
+    ports:
+    - containerPort: 80
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "64Mi"
+        cpu: "50m"

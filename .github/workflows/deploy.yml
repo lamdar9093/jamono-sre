@@ -52,6 +52,5 @@ jobs:
 
       - name: Health check
         run: |
-            sleep 15
-            curl -f -k https://jamono.io/health || \
-            curl -f http://jamono.io/health || exit 1
+          sleep 15
+          ssh root@jamono.io "curl -f -k https://jamono.io/api/health"

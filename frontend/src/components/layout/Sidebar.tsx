@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   History,
   Settings,
+  Users,
 } from "lucide-react";
 
 const navItems = [
@@ -13,6 +14,7 @@ const navItems = [
   { to: "/incidents", icon: AlertTriangle, label: "Incidents" },
   { to: "/history", icon: History, label: "Historique" },
   { to: "/settings", icon: Settings, label: "Paramètres" },
+  { to: "/team", icon: Users, label: "Équipe" },
 ];
 
 export default function Sidebar() {

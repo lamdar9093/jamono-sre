@@ -232,3 +232,9 @@ def _row_to_dict(row) -> dict:
 
 # Init au démarrage
 init_incidents_db()
+
+def update_slack_channel(incident_id: int, channel_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("UPDATE incidents SET slack_channel = ? WHERE id = ?", (channel_id, incident_id))
+    conn.commit()
+    conn.close()

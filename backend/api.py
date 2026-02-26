@@ -20,6 +20,10 @@ init_settings_db()
 from contextlib import asynccontextmanager
 from monitor import start_auto_monitor, run_scan_and_create_incidents
 import asyncio
+from slack_service import create_incident_channel, post_incident_briefing, post_status_update
+
+from team import init_team_db, add_member, list_members, delete_member, set_oncall, get_current_oncall
+init_team_db()
 
 # Initialisation de la DB au démarrage
 init_audit_db()
@@ -210,6 +214,18 @@ async def create_incident_endpoint(req: IncidentCreate):
             assigned_to=req.assigned_to,
             watch_minutes=req.watch_minutes
         )
+
+        # Slack — créer canal + briefing
+        if incident:
+            component = req.linked_pod or req.title[:20]
+            channel_id = create_incident_channel(incident["id"], component)
+            if channel_id:
+                # Sauvegarder le channel_id dans l'incident
+                from incidents import update_slack_channel
+                update_slack_channel(incident["id"], channel_id)
+                incident["slack_channel"] = channel_id
+                post_incident_briefing(channel_id, incident)
+
         return {"status": "success", "incident": incident}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -235,6 +251,9 @@ async def get_incident_endpoint(incident_id: int):
 async def update_status_endpoint(incident_id: int, req: StatusUpdate):
     try:
         incident = update_incident_status(incident_id, req.status, req.author, req.detail)
+        # Notifier Slack du changement de statut
+        if incident.get("slack_channel"):
+            post_status_update(incident["slack_channel"], incident_id, req.status, req.author)
         return {"status": "success", "incident": incident}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -278,5 +297,58 @@ async def manual_scan():
     try:
         result = await asyncio.to_thread(run_scan_and_create_incidents)
         return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# Endpoints équipe — gestion des membres et on-call
+class MemberCreate(BaseModel):
+    name: str
+    email: Optional[str] = None
+    slack_username: Optional[str] = None
+    role: str = "engineer"
+
+class OnCallSet(BaseModel):
+    member_id: int
+    start_date: str
+    end_date: str
+
+@app.get("/team")
+async def get_team():
+    try:
+        members = list_members()
+        oncall = get_current_oncall()
+        return {"status": "success", "members": members, "oncall": oncall}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/team/members")
+async def add_member_endpoint(req: MemberCreate):
+    try:
+        member = add_member(req.name, req.email, req.slack_username, req.role)
+        return {"status": "success", "member": member}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/team/members/{member_id}")
+async def delete_member_endpoint(member_id: int):
+    try:
+        delete_member(member_id)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/team/oncall")
+async def set_oncall_endpoint(req: OnCallSet):
+    try:
+        set_oncall(req.member_id, req.start_date, req.end_date)
+        return {"status": "success", "oncall": get_current_oncall()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/team/oncall")
+async def get_oncall_endpoint():
+    try:
+        oncall = get_current_oncall()
+        return {"status": "success", "oncall": oncall}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

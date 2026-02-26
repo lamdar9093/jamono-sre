@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import History from "./pages/History";
 import Incidents from "./pages/Incidents";
 import Settings from "./pages/Settings";
+import Team from "./pages/Team";
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
               <Route path="/history" element={<History />} />
               <Route path="/incidents" element={<Incidents />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/team" element={<Team />} />
             </Routes>
           </main>
         </div>

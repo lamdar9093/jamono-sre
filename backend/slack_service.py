@@ -221,10 +221,8 @@ async def handle_mention(event: dict):
         )
 
 async def cmd_status(client: WebClient, channel_id: str):
-    """Retourne le statut actuel du pod lié à l'incident."""
     from incidents import list_incidents
     
-    # Trouver l'incident lié à ce canal
     incidents = list_incidents()
     incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
     
@@ -236,7 +234,20 @@ async def cmd_status(client: WebClient, channel_id: str):
     
     try:
         from tools.k8s_core import list_pods_tool
+        from utils.k8s_handler import is_k8s_available
+        
+        if not is_k8s_available():
+            client.chat_postMessage(
+                channel=channel_id, 
+                text=f"⚠️ Cluster Kubernetes non connecté à Jamono. Connecte ton cluster pour obtenir le statut de `{pod_name}`."
+            )
+            return
+            
         pods = list_pods_tool.invoke({"namespace": "default"})
+        if isinstance(pods, str):
+            client.chat_postMessage(channel=channel_id, text=f"❌ Erreur K8s : {pods}")
+            return
+            
         pod = next((p for p in pods if p["pod_name"] == pod_name), None)
         
         if pod:

@@ -35,26 +35,27 @@ jobs:
 
       - name: Deploy on VPS
         run: |
-          ssh root@jamono.io << 'EOF'
+            ssh root@jamono.io << 'EOF'
             cd /opt/jamono
             
-            # Créer le .env depuis les secrets GitHub
-            cat > backend/.env << 'ENVEOF'
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          ENVEOF
+            # Créer le .env depuis les secrets
+            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > backend/.env
             
-            # Build et restart les containers
+            # Build et restart
             docker compose -f docker-compose.prod.yml build --no-cache
             docker compose -f docker-compose.prod.yml up -d
-            
-            # Nettoyer les vieilles images
             docker image prune -f
             
             echo "✅ Déploiement terminé"
-          EOF
+            EOF
+
+    #   - name: Health check
+    #     run: |
+    #         sleep 15
+    #         curl -f -k https://jamono.io/api/health || \
+    #         curl -f http://jamono.io/api/health || exit 1
 
       - name: Health check
         run: |
             sleep 15
-            curl -f -k https://jamono.io/api/health || \
-            curl -f http://jamono.io/api/health || exit 1
+            ssh root@jamono.io "curl -f http://localhost:8000/health" || exit 1

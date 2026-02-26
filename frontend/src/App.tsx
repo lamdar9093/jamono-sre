@@ -4,6 +4,7 @@ import TopBar from "./components/layout/TopBar";
 import Dashboard from "./pages/Dashboard";
 import History from "./pages/History";
 import Incidents from "./pages/Incidents";
+import Settings from "./pages/Settings";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/history" element={<History />} />
               <Route path="/incidents" element={<Incidents />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
         </div>

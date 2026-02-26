@@ -6,9 +6,7 @@ import uuid
 import re
 import json
 from main import run_sre_system
-
 from audit import init_audit_db, log_action, update_action_status, get_audit_log, get_rollback_snapshot
-
 from incidents import (
     init_incidents_db, create_incident, get_incident,
     list_incidents, update_incident_status, add_timeline_entry,
@@ -16,11 +14,23 @@ from incidents import (
 )
 init_incidents_db()
 
+from settings import init_settings_db, get_all_settings, update_settings
+init_settings_db()
+
+from contextlib import asynccontextmanager
+from monitor import start_auto_monitor, run_scan_and_create_incidents
+import asyncio
 
 # Initialisation de la DB au démarrage
 init_audit_db()
 
-app = FastAPI(title="SRE Agent API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Démarrage du monitor en arrière-plan
+    asyncio.create_task(start_auto_monitor())
+    yield
+
+app = FastAPI(title="SRE Agent API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -240,3 +250,33 @@ async def add_timeline_endpoint(incident_id: int, req: TimelineEntry):
 @app.get("/incidents/stats/mttr")
 async def get_mttr_endpoint():
     return {"status": "success", "stats": get_mttr_stats()}
+
+
+# Endpoints paramètres — lecture et mise à jour de la configuration
+class SettingsUpdate(BaseModel):
+    settings: dict
+
+@app.get("/settings")
+async def get_settings_endpoint():
+    try:
+        return {"status": "success", "settings": get_all_settings()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/settings")
+async def update_settings_endpoint(req: SettingsUpdate):
+    try:
+        updated = update_settings(req.settings)
+        return {"status": "success", "settings": updated}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+# Endpoint scan manuel — déclenche immédiatement une vérification du cluster
+@app.post("/monitor/scan")
+async def manual_scan():
+    try:
+        result = await asyncio.to_thread(run_scan_and_create_incidents)
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

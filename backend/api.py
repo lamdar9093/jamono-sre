@@ -94,9 +94,11 @@ async def get_pods():
     try:
         from tools.k8s_core import list_pods_tool
         result = list_pods_tool.invoke({"namespace": "default"})
+        if isinstance(result, str):
+            return {"status": "degraded", "pods": [], "message": result}
         return {"status": "success", "pods": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "degraded", "pods": [], "message": str(e)}
     
 @app.get("/pods/{pod_name}/logs")
 async def get_pod_logs(pod_name: str, namespace: str = "default"):

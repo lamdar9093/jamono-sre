@@ -179,3 +179,146 @@ def invite_oncall_members(channel_id: str):
         print(f"✅ [SLACK] On-call {oncall['name']} invité dans {channel_id}")
     except SlackApiError as e:
         print(f"❌ [SLACK] Erreur invitation : {e.response['error']}")
+
+async def handle_slack_event(body: dict):
+    """Traite les événements Slack — mentions du bot et messages dans les canaux d'incident."""
+    event = body.get("event", {})
+    event_type = event.get("type")
+
+    # Ignorer les messages du bot lui-même
+    if event.get("bot_id"):
+        return
+
+    if event_type == "app_mention":
+        await handle_mention(event)
+
+async def handle_mention(event: dict):
+    """Traite une mention @Jamono dans un canal."""
+    channel_id = event.get("channel")
+    text = event.get("text", "").lower()
+    user = event.get("user")
+
+    client = get_slack_client()
+    if not client:
+        return
+
+    # Extraire la commande après @Jamono
+    import re
+    command_match = re.sub(r'<@[^>]+>', '', text).strip()
+
+    if "status" in command_match:
+        await cmd_status(client, channel_id)
+    elif "resolve" in command_match:
+        await cmd_resolve(client, channel_id, user)
+    elif "assign" in command_match:
+        await cmd_assign(client, channel_id, text, user)
+    elif "analyse" in command_match or "analyze" in command_match:
+        await cmd_analyse(client, channel_id)
+    else:
+        client.chat_postMessage(
+            channel=channel_id,
+            text="🤖 Commandes disponibles :\n• `@Jamono status` — état du pod\n• `@Jamono analyse` — diagnostic IA\n• `@Jamono resolve` — fermer l'incident\n• `@Jamono assign @username` — réassigner"
+        )
+
+async def cmd_status(client: WebClient, channel_id: str):
+    """Retourne le statut actuel du pod lié à l'incident."""
+    from incidents import list_incidents
+    
+    # Trouver l'incident lié à ce canal
+    incidents = list_incidents()
+    incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
+    
+    if not incident or not incident.get("linked_pod"):
+        client.chat_postMessage(channel=channel_id, text="⚠️ Aucun pod lié à cet incident.")
+        return
+
+    pod_name = incident["linked_pod"]
+    
+    try:
+        from tools.k8s_core import list_pods_tool
+        pods = list_pods_tool.invoke({"namespace": "default"})
+        pod = next((p for p in pods if p["pod_name"] == pod_name), None)
+        
+        if pod:
+            emoji = "✅" if pod["health_status"] == "HEALTHY" else "🔴"
+            text = f"{emoji} *{pod_name}*\n• Statut : `{pod['health_status']}`\n• Restarts : `{pod['restarts']}`\n• Phase : `{pod['internal_phase']}`\n• Diagnostic : `{pod['diagnostic']}`"
+        else:
+            text = f"⚠️ Pod `{pod_name}` introuvable."
+    except Exception as e:
+        text = f"❌ Impossible de récupérer le statut : {str(e)}"
+
+    client.chat_postMessage(channel=channel_id, text=text, mrkdwn=True)
+
+async def cmd_resolve(client: WebClient, channel_id: str, user: str):
+    """Ferme l'incident lié au canal."""
+    from incidents import list_incidents, update_incident_status
+    
+    incidents = list_incidents()
+    incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
+    
+    if not incident:
+        client.chat_postMessage(channel=channel_id, text="⚠️ Aucun incident lié à ce canal.")
+        return
+
+    if incident["status"] == "resolved":
+        client.chat_postMessage(channel=channel_id, text="✅ Cet incident est déjà résolu.")
+        return
+
+    update_incident_status(incident["id"], "resolved", author=f"slack:{user}", detail="Résolu via commande Slack")
+    client.chat_postMessage(
+        channel=channel_id,
+        text=f"✅ *Incident #{incident['id']} résolu* par <@{user}>\n_Canal archivé dans 24h._"
+    )
+
+async def cmd_assign(client: WebClient, channel_id: str, text: str, user: str):
+    """Réassigne l'incident à un membre."""
+    from incidents import list_incidents
+    import re
+    
+    incidents = list_incidents()
+    incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
+    
+    if not incident:
+        client.chat_postMessage(channel=channel_id, text="⚠️ Aucun incident lié à ce canal.")
+        return
+
+    # Extraire le username cible
+    mention = re.findall(r'<@([^>]+)>', text)
+    mentions = [m for m in mention if m != user]
+    
+    if not mentions:
+        client.chat_postMessage(channel=channel_id, text="⚠️ Usage : `@Jamono assign @username`")
+        return
+
+    target_user = mentions[0]
+    client.chat_postMessage(
+        channel=channel_id,
+        text=f"👤 Incident #{incident['id']} réassigné à <@{target_user}> par <@{user}>"
+    )
+
+async def cmd_analyse(client: WebClient, channel_id: str):
+    """Lance un diagnostic IA complet sur le pod lié."""
+    from incidents import list_incidents
+    
+    incidents = list_incidents()
+    incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
+    
+    if not incident or not incident.get("linked_pod"):
+        client.chat_postMessage(channel=channel_id, text="⚠️ Aucun pod lié à cet incident.")
+        return
+
+    client.chat_postMessage(channel=channel_id, text=f"🔍 Analyse en cours pour `{incident['linked_pod']}`...")
+    
+    try:
+        from main import run_sre_system
+        result = await asyncio.to_thread(
+            run_sre_system,
+            f"Analyse complète du pod {incident['linked_pod']} et propose une remédiation"
+        )
+        response_text = result.get("response", "Aucune réponse")
+        # Limiter à 3000 caractères pour Slack
+        if len(response_text) > 3000:
+            response_text = response_text[:3000] + "...\n_[Voir Jamono pour l'analyse complète]_"
+        client.chat_postMessage(channel=channel_id, text=f"🤖 *Analyse IA :*\n{response_text}", mrkdwn=True)
+    except Exception as e:
+        client.chat_postMessage(channel=channel_id, text=f"❌ Erreur analyse : {str(e)}")

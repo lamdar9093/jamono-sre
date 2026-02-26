@@ -25,6 +25,8 @@ from slack_service import create_incident_channel, post_incident_briefing, post_
 from team import init_team_db, add_member, list_members, delete_member, set_oncall, get_current_oncall
 init_team_db()
 
+from slack_service import handle_slack_event
+
 # Initialisation de la DB au démarrage
 init_audit_db()
 
@@ -356,3 +358,15 @@ async def get_oncall_endpoint():
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "version": "1.0.0"}
+
+@app.post("/slack/events")
+async def slack_events(request: Request):
+    body = await request.json()
+    
+    # Vérification du challenge Slack
+    if body.get("type") == "url_verification":
+        return {"challenge": body.get("challenge")}
+    
+    # Traitement des events en arrière-plan
+    asyncio.create_task(handle_slack_event(body))
+    return {"ok": True}

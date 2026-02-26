@@ -34,10 +34,12 @@ export default function Dashboard() {
   const [showRemediationModal, setShowRemediationModal] = useState(false);
   const [remediationTarget, setRemediationTarget] = useState<{ pod: string; rem: Remediation } | null>(null);
 
-  // Chargement initial des pods
-  useEffect(() => {
-    fetchPods();
-  }, []);
+useEffect(() => {
+  fetchPods();
+  // Refresh automatique toutes les 30 secondes
+  const interval = setInterval(fetchPods, 30000);
+  return () => clearInterval(interval);
+}, []);
 
   const fetchPods = async () => {
     setPodsLoading(true);

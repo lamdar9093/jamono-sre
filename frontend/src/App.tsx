@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar";
 import TopBar from "./components/layout/TopBar";
 import Dashboard from "./pages/Dashboard";
+import History from "./pages/History";
+import Incidents from "./pages/Incidents";
 
 function App() {
   return (
@@ -19,6 +21,8 @@ function App() {
           <main className="flex-1 overflow-auto p-6">
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/incidents" element={<Incidents />} />
             </Routes>
           </main>
         </div>

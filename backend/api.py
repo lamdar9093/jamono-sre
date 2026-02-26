@@ -9,6 +9,14 @@ from main import run_sre_system
 
 from audit import init_audit_db, log_action, update_action_status, get_audit_log, get_rollback_snapshot
 
+from incidents import (
+    init_incidents_db, create_incident, get_incident,
+    list_incidents, update_incident_status, add_timeline_entry,
+    get_timeline, check_watch_incidents, get_mttr_stats
+)
+init_incidents_db()
+
+
 # Initialisation de la DB au démarrage
 init_audit_db()
 
@@ -92,7 +100,7 @@ async def get_pod_events(pod_name: str, namespace: str = "default"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-    
+
 # Endpoint de confirmation de remédiation — enregistre dans l'audit avant d'exécuter
 class RemediationRequest(BaseModel):
     pod_name: str
@@ -156,3 +164,79 @@ async def rollback_remediation(action_id: int):
 @app.get("/audit")
 async def get_audit():
     return {"status": "success", "logs": get_audit_log()}
+
+
+# Endpoints incidents — gestion complète du cycle de vie
+class IncidentCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    severity: str = "medium"
+    source: str = "manual"
+    environment: str = "prod"
+    linked_pod: Optional[str] = None
+    assigned_to: Optional[str] = None
+    watch_minutes: Optional[int] = None
+
+class StatusUpdate(BaseModel):
+    status: str
+    detail: Optional[str] = None
+    author: str = "admin"
+
+class TimelineEntry(BaseModel):
+    action: str
+    detail: str
+    author: str = "admin"
+
+@app.post("/incidents")
+async def create_incident_endpoint(req: IncidentCreate):
+    try:
+        incident = create_incident(
+            title=req.title,
+            description=req.description,
+            severity=req.severity,
+            source=req.source,
+            environment=req.environment,
+            linked_pod=req.linked_pod,
+            assigned_to=req.assigned_to,
+            watch_minutes=req.watch_minutes
+        )
+        return {"status": "success", "incident": incident}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/incidents")
+async def list_incidents_endpoint(status: Optional[str] = None, environment: Optional[str] = None):
+    try:
+        incidents = list_incidents(status=status, environment=environment)
+        stats = get_mttr_stats()
+        return {"status": "success", "incidents": incidents, "stats": stats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/incidents/{incident_id}")
+async def get_incident_endpoint(incident_id: int):
+    incident = get_incident(incident_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident introuvable")
+    timeline = get_timeline(incident_id)
+    return {"status": "success", "incident": incident, "timeline": timeline}
+
+@app.patch("/incidents/{incident_id}/status")
+async def update_status_endpoint(incident_id: int, req: StatusUpdate):
+    try:
+        incident = update_incident_status(incident_id, req.status, req.author, req.detail)
+        return {"status": "success", "incident": incident}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/incidents/{incident_id}/timeline")
+async def add_timeline_endpoint(incident_id: int, req: TimelineEntry):
+    try:
+        add_timeline_entry(incident_id, req.action, req.detail, req.author)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/incidents/stats/mttr")
+async def get_mttr_endpoint():
+    return {"status": "success", "stats": get_mttr_stats()}

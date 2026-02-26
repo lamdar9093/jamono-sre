@@ -53,14 +53,14 @@ jobs:
       - name: Health check
         run: |
           ssh root@jamono.io "
-            for i in \$(seq 1 10); do
-              echo \"Attempt \$i/10...\"
+            for i in \$(seq 1 5); do
+              echo \"Attempt \$i/5...\"
               if curl -sf http://localhost:8000/health; then
                 echo 'Health check passed'
                 exit 0
               fi
               sleep 10
             done
-            echo 'Health check failed after 10 attempts'
+            echo 'Health check failed after 5 attempts'
             exit 1
           "

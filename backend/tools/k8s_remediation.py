@@ -2,8 +2,7 @@ from dotenv import load_dotenv
 from langchain_core.tools import tool
 from kubernetes import client, config
 
-from utils.k8s_handler import get_v1_client, get_apps_v1_client
-v1 = get_v1_client()
+from utils.k8s_handler import get_apps_v1_client
 
 @tool
 def patch_deployment_resources_tool(deployment_name: str, memory_limit: str, namespace: str = "default"):

@@ -55,7 +55,7 @@ jobs:
           ssh root@jamono.io "
             for i in \$(seq 1 5); do
               echo \"Attempt \$i/5...\"
-              if curl -sf http://localhost:8000/health; then
+              if docker exec jamono-backend curl -sf http://localhost:8000/health; then
                 echo 'Health check passed'
                 exit 0
               fi

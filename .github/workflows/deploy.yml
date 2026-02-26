@@ -50,13 +50,8 @@ jobs:
             echo "✅ Déploiement terminé"
             EOF
 
-    #   - name: Health check
-    #     run: |
-    #         sleep 15
-    #         curl -f -k https://jamono.io/api/health || \
-    #         curl -f http://jamono.io/api/health || exit 1
-
-    #   - name: Health check
-    #     run: |
-    #         sleep 15
-    #         ssh root@jamono.io "curl -f http://localhost:8000/health" || exit 1
+      - name: Health check
+        run: |
+            sleep 15
+            curl -f -k https://jamono.io/health || \
+            curl -f http://jamono.io/health || exit 1

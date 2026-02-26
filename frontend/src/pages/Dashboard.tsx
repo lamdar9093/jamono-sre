@@ -29,7 +29,7 @@ export default function Dashboard() {
   const [showDrawer, setShowDrawer] = useState(false);
   const [drawerTitle, setDrawerTitle] = useState("");
   const [drawerContent, setDrawerContent] = useState("");
-  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showRemediationModal, setShowRemediationModal] = useState(false);
   const [remediationTarget, setRemediationTarget] = useState<{ pod: string; rem: Remediation } | null>(null);

@@ -344,7 +344,7 @@ function Field({ label, description, children }: { label: string; description?: 
 }
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  const isOn = Boolean(value) && value !== "false";
+  const isOn = Boolean(value);
   return (
     <button
       onClick={() => onChange(!isOn)}

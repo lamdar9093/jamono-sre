@@ -88,24 +88,6 @@ useEffect(() => {
     }
   };
 
-  const viewPodLogs = async (podName: string) => {
-    setDrawerTitle(`Logs — ${podName}`);
-    setDrawerContent("");
-    setDrawerLoading(true);
-    setShowDrawer(true);
-    try {
-      const res = await axios.post(`${API_URL}/chat`, {
-        message: `Donne moi les logs bruts du pod ${podName} sans analyse.`,
-        thread_id: "logs_viewer",
-      });
-      setDrawerContent(res.data.response);
-    } catch (e) {
-      setDrawerContent("Erreur lors de la récupération des logs.");
-    } finally {
-      setDrawerLoading(false);
-    }
-  };
-
   const requestRemediation = async (podName: string) => {
   setLoading(true);
   try {

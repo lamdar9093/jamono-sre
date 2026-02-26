@@ -6,7 +6,6 @@ import {
   CheckCircle,
   AlertTriangle,
   RefreshCw,
-  FileText,
   ChevronDown,
   ChevronUp,
   Terminal,

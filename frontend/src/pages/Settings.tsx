@@ -2,7 +2,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import axios from "axios";
 import {
-  Settings as SettingsIcon, Save, RefreshCw,
+  Settings as Save, RefreshCw,
   Server, AlertTriangle, Slack, Users, Globe,
   CheckCircle, Eye, EyeOff, Plus, X,
 } from "lucide-react";
@@ -344,7 +344,7 @@ function Field({ label, description, children }: { label: string; description?: 
 }
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  const isOn = value === true || value === "true";
+  const isOn = Boolean(value) && value !== "false";
   return (
     <button
       onClick={() => onChange(!isOn)}

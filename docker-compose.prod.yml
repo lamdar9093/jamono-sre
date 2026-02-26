@@ -1,17 +1,18 @@
 version: "3.9"
 
-services:backend:
-  build:
-    context: .
-    dockerfile: docker/backend.Dockerfile
-  container_name: jamono-backend
-  restart: always
-  environment:
-    - OPENAI_API_KEY=${OPENAI_API_KEY}
-  networks:
-    - jamono-net
-  volumes:
-    - jamono-data:/app/data
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    container_name: jamono-backend
+    restart: always
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    networks:
+      - jamono-net
+    volumes:
+      - jamono-data:/app/data
 
   frontend:
     build:

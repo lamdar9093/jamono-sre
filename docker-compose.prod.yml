@@ -1,20 +1,17 @@
 version: "3.9"
 
-services:
-  backend:
-    build:
-      context: .
-      dockerfile: docker/backend.Dockerfile
-    container_name: jamono-backend
-    restart: always
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - KUBECONFIG=${KUBECONFIG}
-    volumes:
-      - jamono-data:/app/data
-      - ${KUBECONFIG_PATH}:/root/.kube/config:ro
-    networks:
-      - jamono-net
+services:backend:
+  build:
+    context: .
+    dockerfile: docker/backend.Dockerfile
+  container_name: jamono-backend
+  restart: always
+  environment:
+    - OPENAI_API_KEY=${OPENAI_API_KEY}
+  networks:
+    - jamono-net
+  volumes:
+    - jamono-data:/app/data
 
   frontend:
     build:

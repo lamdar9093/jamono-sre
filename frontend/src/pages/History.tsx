@@ -43,7 +43,7 @@ export default function History() {
     setLoading(true);
     try {
       const res = await axios.get(`${API_URL}/audit`);
-      setLogs(res.data.logs);
+      setLogs(res.data.logs ?? []);
     } catch (e) {
       console.error(e);
     } finally {

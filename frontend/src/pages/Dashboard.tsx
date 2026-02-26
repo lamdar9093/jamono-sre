@@ -44,7 +44,7 @@ useEffect(() => {
     setPodsLoading(true);
     try {
       const res = await axios.get(`${API_URL}/pods`);
-      setPods(res.data.pods);
+      setPods(res.data.pods ?? []);
     } catch (e) {
       console.error(e);
     } finally {

@@ -51,7 +51,7 @@ export default function Incidents() {
     setLoading(true);
     try {
       const res = await axios.get(`${API_URL}/incidents`);
-      setIncidents(res.data.incidents);
+      setIncidents(res.data.incidents ?? []);
       setStats(res.data.stats);
     } catch (e) {
       console.error(e);

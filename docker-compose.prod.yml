@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    container_name: jamono-backend
+    restart: always
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - KUBECONFIG=${KUBECONFIG}
+    volumes:
+      - jamono-data:/app/data
+      - ${KUBECONFIG_PATH}:/root/.kube/config:ro
+    networks:
+      - jamono-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    container_name: jamono-frontend
+    restart: always
+    networks:
+      - jamono-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: jamono-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/jamono.conf:/etc/nginx/conf.d/jamono.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - jamono-net
+
+volumes:
+  jamono-data:
+
+networks:
+  jamono-net:
+    driver: bridge

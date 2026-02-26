@@ -352,3 +352,7 @@ async def get_oncall_endpoint():
         return {"status": "success", "oncall": oncall}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "version": "1.0.0"}

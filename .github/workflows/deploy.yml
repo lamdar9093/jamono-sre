@@ -1,0 +1,59 @@
+name: Deploy Jamono
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to known hosts
+        run: |
+          ssh-keyscan -H jamono.io >> ~/.ssh/known_hosts
+
+      - name: Copy files to VPS
+        run: |
+          rsync -avz --exclude='.git' \
+            --exclude='backend/.env' \
+            --exclude='backend/*.db' \
+            --exclude='backend/__pycache__' \
+            --exclude='backend/.venv' \
+            --exclude='frontend/node_modules' \
+            ./ root@jamono.io:/opt/jamono/
+
+      - name: Deploy on VPS
+        run: |
+          ssh root@jamono.io << 'EOF'
+            cd /opt/jamono
+            
+            # Créer le .env depuis les secrets GitHub
+            cat > backend/.env << 'ENVEOF'
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          ENVEOF
+            
+            # Build et restart les containers
+            docker compose -f docker-compose.prod.yml build --no-cache
+            docker compose -f docker-compose.prod.yml up -d
+            
+            # Nettoyer les vieilles images
+            docker image prune -f
+            
+            echo "✅ Déploiement terminé"
+          EOF
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f https://jamono.io/api/health || exit 1

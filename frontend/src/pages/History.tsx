@@ -11,8 +11,7 @@ import {
   Shield,
   Loader2,
 } from "lucide-react";
-
-const API_URL = "http://localhost:8000";
+import API_URL from "../config";
 
 interface AuditEntry {
   id: number;

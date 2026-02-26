@@ -16,8 +16,7 @@ import {
 } from "lucide-react";
 
 import RemediationModal from "../components/RemediationModal";
-
-const API_URL = "http://localhost:8000";
+import API_URL from "../config";
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(false);

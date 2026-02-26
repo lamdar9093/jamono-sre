@@ -6,8 +6,7 @@ import {
   Server, AlertTriangle, Slack, Users, Globe,
   CheckCircle, Eye, EyeOff, Plus, X,
 } from "lucide-react";
-
-const API_URL = "http://localhost:8000";
+import API_URL from "../config";
 
 interface Settings {
   org_name: string;

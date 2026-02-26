@@ -6,8 +6,7 @@ import {
   AlertTriangle, CheckCircle, Clock, Eye, Plus,
   RefreshCw, X, Activity, Filter, Shield,
 } from "lucide-react";
-
-const API_URL = "http://localhost:8000";
+import API_URL from "../config";
 
 const severityConfig: Record<string, { label: string; color: string }> = {
   low:      { label: "LOW",      color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },

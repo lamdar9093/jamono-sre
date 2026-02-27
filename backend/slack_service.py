@@ -260,6 +260,7 @@ async def cmd_status(client: WebClient, channel_id: str):
 
     client.chat_postMessage(channel=channel_id, text=text, mrkdwn=True)
 
+
 async def cmd_resolve(client: WebClient, channel_id: str, user: str):
     """Ferme l'incident lié au canal."""
     from incidents import list_incidents, update_incident_status

@@ -1,4 +1,5 @@
 # Gestion des paramètres de la plateforme — stockage SQLite clé/valeur avec valeurs par défaut
+import os
 import sqlite3
 import json
 
@@ -30,6 +31,7 @@ DEFAULTS = {
 }
 
 def init_settings_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS settings (

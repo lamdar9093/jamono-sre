@@ -1,80 +1,123 @@
-// Page incidents — liste, création manuelle/watch et détail avec timeline
 import { useState, useEffect } from "react";
 import axios from "axios";
-import type { Incident, TimelineEntry, MttrStats } from "../types";
-import {
-  AlertTriangle, CheckCircle, Clock, Eye, Plus,
-  RefreshCw, X, Activity, Filter, Shield,
-} from "lucide-react";
 import API_URL from "../config";
 
-const severityConfig: Record<string, { label: string; color: string }> = {
-  low:      { label: "LOW",      color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
-  medium:   { label: "MEDIUM",   color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" },
-  high:     { label: "HIGH",     color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
-  critical: { label: "CRITICAL", color: "text-red-400 bg-red-500/10 border-red-500/20" },
-};
-
-const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
-  watching:    { label: "Surveillance", color: "text-blue-400 bg-blue-500/10 border-blue-500/20", icon: Eye },
-  open:        { label: "Ouvert",       color: "text-orange-400 bg-orange-500/10 border-orange-500/20", icon: AlertTriangle },
-  in_progress: { label: "En cours",     color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20", icon: Activity },
-  resolved:    { label: "Résolu",       color: "text-green-400 bg-green-500/10 border-green-500/20", icon: CheckCircle },
-};
-
-function formatMttr(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+interface Incident {
+  id: number;
+  title: string;
+  description: string | null;
+  severity: string;
+  status: string;
+  source: string;
+  environment: string;
+  linked_pod: string | null;
+  assigned_to: string | null;
+  created_by: string;
+  slack_channel: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  mttr_seconds: number | null;
 }
 
-function formatDate(iso: string): string {
+interface TimelineEntry {
+  id: number;
+  action: string;
+  author: string;
+  detail: string;
+  timestamp: string;
+}
+
+interface MttrStats {
+  total: number;
+  resolved: number;
+  avg_mttr_seconds: number;
+  min_mttr_seconds: number;
+}
+
+const SEV: Record<string, { color: string; label: string }> = {
+  critical: { color: "#C04040", label: "Critical" },
+  high:     { color: "var(--jam2)", label: "High" },
+  medium:   { color: "var(--am)", label: "Medium" },
+  low:      { color: "var(--bl)", label: "Low" },
+};
+
+const STA: Record<string, { color: string; bg: string; label: string }> = {
+  open:        { color: "var(--re)", bg: "var(--re-a)", label: "Ouvert" },
+  in_progress: { color: "var(--am)", bg: "var(--am-a)", label: "En cours" },
+  resolved:    { color: "var(--g)",  bg: "var(--g-a)",  label: "Résolu" },
+  watching:    { color: "var(--bl)", bg: "var(--bl-a)", label: "Surveillance" },
+};
+
+function timeAgo(d: string) {
+  const s = (Date.now() - new Date(d).getTime()) / 1000;
+  if (s < 60) return `${Math.floor(s)}s`;
+  if (s < 3600) return `${Math.floor(s/60)}min`;
+  if (s < 86400) return `${Math.floor(s/3600)}h`;
+  return `${Math.floor(s/86400)}j`;
+}
+
+function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("fr-CA", {
-    day: "2-digit", month: "short",
-    hour: "2-digit", minute: "2-digit"
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"
   });
 }
+
+function fmtMttr(s: number) {
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m`;
+  return `${Math.floor(s/3600)}h${Math.floor((s%3600)/60)}m`;
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "var(--s2)",
+  border: "1px solid var(--b2)",
+  borderRadius: "var(--r)",
+  padding: "6px 10px",
+  fontFamily: "var(--fm)",
+  fontSize: 11,
+  color: "var(--t1)",
+  outline: "none",
+};
 
 export default function Incidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [stats, setStats] = useState<MttrStats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterEnv, setFilterEnv] = useState<string>("all");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterEnv, setFilterEnv] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [selected, setSelected] = useState<Incident | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
 
-  useEffect(() => { fetchIncidents(); }, []);
-
-  const fetchIncidents = async () => {
+  const fetch = async () => {
     setLoading(true);
     try {
       const res = await axios.get(`${API_URL}/incidents`);
       setIncidents(res.data.incidents ?? []);
       setStats(res.data.stats);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
-  const openDetail = async (incident: Incident) => {
-    setSelectedIncident(incident);
-    const res = await axios.get(`${API_URL}/incidents/${incident.id}`);
-    setTimeline(res.data.timeline);
+  useEffect(() => { fetch(); }, []);
+
+  const openDetail = async (inc: Incident) => {
+    setSelected(inc);
+    try {
+      const res = await axios.get(`${API_URL}/incidents/${inc.id}`);
+      setTimeline(res.data.timeline ?? []);
+    } catch (e) { setTimeline([]); }
   };
 
-  const updateStatus = async (incidentId: number, status: string) => {
-    await axios.patch(`${API_URL}/incidents/${incidentId}/status`, {
-      status, detail: `Statut changé → ${status}`
-    });
-    await fetchIncidents();
-    if (selectedIncident?.id === incidentId) {
-      const res = await axios.get(`${API_URL}/incidents/${incidentId}`);
-      setSelectedIncident(res.data.incident);
-      setTimeline(res.data.timeline);
+  const updateStatus = async (id: number, status: string) => {
+    await axios.patch(`${API_URL}/incidents/${id}/status`, { status, detail: `Statut → ${status}` });
+    await fetch();
+    if (selected?.id === id) {
+      const res = await axios.get(`${API_URL}/incidents/${id}`);
+      setSelected(res.data.incident);
+      setTimeline(res.data.timeline ?? []);
     }
   };
 
@@ -84,262 +127,281 @@ export default function Incidents() {
     return true;
   });
 
-  return (
-    <div className="space-y-6">
+  const Pill = ({ sev }: { sev: string }) => {
+    const s = SEV[sev] || SEV.low;
+    return (
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: "2px 6px", borderRadius: 3,
+        fontFamily: "var(--fm)", fontSize: 9, fontWeight: 500, letterSpacing: "0.05em",
+        color: s.color,
+        background: `${s.color}18`,
+        border: `1px solid ${s.color}30`,
+      }}>
+        <span style={{ width: 4, height: 4, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
+        {s.label}
+      </span>
+    );
+  };
 
-      {/* En-tête */}
-      <div className="flex items-center justify-between">
+  const StatusBadge = ({ status }: { status: string }) => {
+    const s = STA[status] || STA.open;
+    const pulse = status === "open" || status === "in_progress";
+    return (
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        padding: "2px 7px", borderRadius: 3,
+        fontFamily: "var(--fm)", fontSize: 9, fontWeight: 500, letterSpacing: "0.04em",
+        color: s.color, background: s.bg,
+      }}>
+        <span style={{
+          width: 4, height: 4, borderRadius: "50%", background: "currentColor",
+          display: "inline-block",
+          animation: pulse ? "blink 2s ease-in-out infinite" : "none",
+        }} />
+        {s.label}
+      </span>
+    );
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}`}</style>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <h1 className="text-xl font-bold text-zinc-100 tracking-tight">Incidents</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Gestion du cycle de vie des incidents</p>
+          <h1 style={{ fontSize: 17, fontWeight: 600, color: "var(--t1)", letterSpacing: "-0.02em" }}>Incidents</h1>
+          <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", marginTop: 2 }}>
+            // {incidents.length} total · {incidents.filter(i => i.status === "open").length} ouverts
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={fetchIncidents}
-            className="flex items-center gap-2 px-3 py-2 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-100 text-sm font-mono transition-all"
-          >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold text-sm rounded transition-all font-mono"
-          >
-            <Plus size={15} />
-            Créer un incident
-          </button>
-        </div>
+        <button onClick={() => setShowCreate(true)} style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          padding: "5px 12px", borderRadius: 5,
+          fontFamily: "var(--f)", fontSize: 12, fontWeight: 500,
+          cursor: "pointer", border: "1px solid var(--jam2)",
+          background: "var(--jam)", color: "#fff",
+        }}>
+          + Créer
+        </button>
       </div>
 
       {/* Stats MTTR */}
       {stats && (
-        <div className="grid grid-cols-4 gap-4">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
           {[
-            { label: "Total incidents", value: stats.total, color: "text-zinc-100" },
-            { label: "Résolus", value: stats.resolved, color: "text-green-400" },
-            { label: "MTTR moyen", value: stats.avg_mttr_seconds ? formatMttr(stats.avg_mttr_seconds) : "—", color: "text-orange-400" },
-            { label: "Meilleur MTTR", value: stats.min_mttr_seconds ? formatMttr(stats.min_mttr_seconds) : "—", color: "text-blue-400" },
-          ].map((s) => (
-            <div key={s.label} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider">{s.label}</p>
-              <p className={`text-2xl font-bold font-mono mt-1 ${s.color}`}>{s.value}</p>
+            { label: "Total", val: stats.total, color: "var(--t1)" },
+            { label: "Résolus", val: stats.resolved, color: "var(--g)" },
+            { label: "MTTR moyen", val: stats.avg_mttr_seconds ? fmtMttr(stats.avg_mttr_seconds) : "—", color: "var(--jam2)" },
+            { label: "Meilleur MTTR", val: stats.min_mttr_seconds ? fmtMttr(stats.min_mttr_seconds) : "—", color: "var(--bl)" },
+          ].map(s => (
+            <div key={s.label} style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", padding: "12px 14px" }}>
+              <div style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>{s.label}</div>
+              <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.03em", color: s.color }}>{s.val}</div>
             </div>
           ))}
         </div>
       )}
 
       {/* Filtres */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Filter size={13} className="text-zinc-600" />
-        <div className="flex gap-2">
-          {["all", "watching", "open", "in_progress", "resolved"].map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1 rounded text-xs font-mono transition-all border ${
-                filterStatus === s
-                  ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
-                  : "text-zinc-500 hover:text-zinc-300 border-transparent"
-              }`}
-            >
-              {s === "all" ? "Tous" : statusConfig[s]?.label}
-            </button>
-          ))}
-        </div>
-        <div className="w-px h-4 bg-zinc-800" />
-        <div className="flex gap-2">
-          {["all", "prod", "staging", "dev"].map((e) => (
-            <button
-              key={e}
-              onClick={() => setFilterEnv(e)}
-              className={`px-3 py-1 rounded text-xs font-mono transition-all border ${
-                filterEnv === e
-                  ? "bg-zinc-700 text-zinc-300 border-zinc-600"
-                  : "text-zinc-500 hover:text-zinc-300 border-transparent"
-              }`}
-            >
-              {e === "all" ? "Tous envs" : e}
-            </button>
-          ))}
-        </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        {["all","watching","open","in_progress","resolved"].map(s => (
+          <button key={s} onClick={() => setFilterStatus(s)} style={{
+            padding: "3px 10px", borderRadius: 4,
+            fontFamily: "var(--fm)", fontSize: 10, cursor: "pointer",
+            border: filterStatus === s ? "1px solid var(--jam-b)" : "1px solid transparent",
+            background: filterStatus === s ? "var(--jam-a)" : "transparent",
+            color: filterStatus === s ? "var(--jam2)" : "var(--t3)",
+            transition: "all 0.1s",
+          }}>
+            {s === "all" ? "Tous" : STA[s]?.label || s}
+          </button>
+        ))}
+        <div style={{ width: 1, height: 14, background: "var(--b2)", margin: "0 2px" }} />
+        {["all","prod","staging","dev"].map(e => (
+          <button key={e} onClick={() => setFilterEnv(e)} style={{
+            padding: "3px 10px", borderRadius: 4,
+            fontFamily: "var(--fm)", fontSize: 10, cursor: "pointer",
+            border: filterEnv === e ? "1px solid var(--b3)" : "1px solid transparent",
+            background: filterEnv === e ? "var(--s2)" : "transparent",
+            color: filterEnv === e ? "var(--t2)" : "var(--t3)",
+            transition: "all 0.1s",
+          }}>
+            {e === "all" ? "Tous envs" : e}
+          </button>
+        ))}
       </div>
 
-      {/* Liste incidents */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-zinc-800">
-          <AlertTriangle size={15} className="text-orange-500" />
-          <span className="text-sm font-mono text-zinc-300 uppercase tracking-wide">
-            {filtered.length} incident{filtered.length !== 1 ? "s" : ""}
-          </span>
+      {/* Table */}
+      <div style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", overflow: "hidden" }}>
+
+        {/* Col headers */}
+        <div style={{ display: "grid", gridTemplateColumns: "34px 72px 1fr 88px 90px 64px", padding: "6px 14px", gap: 10, borderBottom: "1px solid var(--b1)" }}>
+          {["#","Sévérité","Titre","Statut","Assigné","Âge"].map(h => (
+            <span key={h} style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{h}</span>
+          ))}
         </div>
 
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <Shield size={32} className="text-zinc-700" />
-            <p className="text-zinc-600 font-mono text-sm">Aucun incident</p>
+        {loading ? (
+          <div style={{ padding: "24px 14px", textAlign: "center" }}>
+            <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Chargement...</p>
           </div>
-        ) : (
-          <div className="divide-y divide-zinc-800">
-            {filtered.map((incident) => {
-              const sev = severityConfig[incident.severity];
-              const status = statusConfig[incident.status];
-              const StatusIcon = status?.icon || AlertTriangle;
-
-              return (
-                <div
-                  key={incident.id}
-                  onClick={() => openDetail(incident)}
-                  className="flex items-center gap-4 px-5 py-4 hover:bg-zinc-800/50 cursor-pointer transition-all"
-                >
-                  {/* ID */}
-                  <span className="text-xs text-zinc-600 font-mono w-10 shrink-0">
-                    #{incident.id}
-                  </span>
-
-                  {/* Sévérité */}
-                  <span className={`text-xs font-mono px-2 py-0.5 rounded border w-20 text-center shrink-0 ${sev?.color}`}>
-                    {sev?.label}
-                  </span>
-
-                  {/* Titre + pod */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-zinc-100 font-medium truncate">{incident.title}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {incident.linked_pod && (
-                        <span className="text-xs text-zinc-500 font-mono">{incident.linked_pod}</span>
-                      )}
-                      <span className="text-xs text-zinc-600 font-mono">{incident.environment}</span>
-                      <span className="text-xs text-zinc-600 font-mono">
-                        {incident.source === "auto" ? "🤖 auto" : incident.source === "watch" ? "👁 watch" : "👤 manuel"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Assigné */}
-                  <div className="flex items-center gap-1 text-xs text-zinc-500 font-mono w-24 shrink-0">
-                    <Shield size={10} />
-                    <span className="truncate">{incident.assigned_to || "Non assigné"}</span>
-                  </div>
-
-                  {/* Date */}
-                  <div className="flex items-center gap-1 text-xs text-zinc-600 font-mono w-28 shrink-0">
-                    <Clock size={10} />
-                    <span>{formatDate(incident.created_at)}</span>
-                  </div>
-
-                  {/* Statut */}
-                  <span className={`flex items-center gap-1.5 text-xs font-mono px-2 py-1 rounded border w-28 shrink-0 ${status?.color}`}>
-                    <StatusIcon size={10} />
-                    {status?.label}
-                  </span>
-                </div>
-              );
-            })}
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: "32px 14px", textAlign: "center" }}>
+            <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Aucun incident</p>
           </div>
-        )}
-      </div>
-
-      {/* Drawer détail incident */}
-      {selectedIncident && (
-        <>
-          <div className="fixed inset-0 bg-black/60 z-40" onClick={() => setSelectedIncident(null)} />
-          <div className="fixed top-0 right-0 h-full w-2/5 bg-zinc-900 border-l border-zinc-700 z-50 flex flex-col">
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-mono text-zinc-300 font-bold">
-                  Incident #{selectedIncident.id}
-                </span>
-                <span className={`text-xs font-mono px-2 py-0.5 rounded border ${severityConfig[selectedIncident.severity]?.color}`}>
-                  {severityConfig[selectedIncident.severity]?.label}
+        ) : filtered.map(inc => (
+          <div
+            key={inc.id}
+            onClick={() => openDetail(inc)}
+            style={{
+              display: "grid", gridTemplateColumns: "34px 72px 1fr 88px 90px 64px",
+              alignItems: "center", padding: "8px 14px", gap: 10,
+              borderBottom: "1px solid var(--b1)", cursor: "pointer",
+              transition: "background 0.08s",
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--s2)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+          >
+            <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>#{inc.id}</span>
+            <Pill sev={inc.severity} />
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--t1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "-0.01em" }}>
+                {inc.title}
+              </div>
+              <div style={{ display: "flex", gap: 4, marginTop: 2 }}>
+                <span style={{
+                  padding: "1px 5px", borderRadius: 3, fontFamily: "var(--fm)", fontSize: 8.5,
+                  color: inc.environment === "prod" ? "var(--jam2)" : "var(--bl)",
+                  background: inc.environment === "prod" ? "var(--jam-a)" : "var(--bl-a)",
+                  border: `1px solid ${inc.environment === "prod" ? "var(--jam-b)" : "rgba(58,120,192,0.18)"}`,
+                }}>{inc.environment}</span>
+                <span style={{
+                  padding: "1px 5px", borderRadius: 3, fontFamily: "var(--fm)", fontSize: 8.5,
+                  color: "var(--t3)", background: "var(--s2)", border: "1px solid var(--b2)",
+                }}>
+                  {inc.source === "auto" ? "auto" : inc.source === "watch" ? "watch" : "manuel"}
                 </span>
               </div>
-              <button
-                onClick={() => setSelectedIncident(null)}
-                className="p-1.5 rounded text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all"
-              >
-                <X size={15} />
-              </button>
+            </div>
+            <StatusBadge status={inc.status} />
+            <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {inc.assigned_to || "—"}
+            </span>
+            <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", textAlign: "right" }}>
+              {timeAgo(inc.created_at)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Drawer détail */}
+      {selected && (
+        <>
+          <div
+            onClick={() => setSelected(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40 }}
+          />
+          <div style={{
+            position: "fixed", top: 0, right: 0, height: "100%", width: "380px",
+            background: "var(--s1)", borderLeft: "1px solid var(--b2)",
+            zIndex: 50, display: "flex", flexDirection: "column",
+            boxShadow: "-20px 0 60px rgba(0,0,0,0.4)",
+          }}>
+            {/* Drawer header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--b1)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>#{selected.id}</span>
+                <Pill sev={selected.severity} />
+                <StatusBadge status={selected.status} />
+              </div>
+              <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "var(--t3)", cursor: "pointer", fontSize: 16 }}>✕</button>
             </div>
 
-            <div className="flex-1 overflow-auto p-6 space-y-5">
+            <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
 
               {/* Titre */}
               <div>
-                <p className="text-lg font-bold text-zinc-100">{selectedIncident.title}</p>
-                {selectedIncident.description && (
-                  <p className="text-sm text-zinc-400 mt-1">{selectedIncident.description}</p>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--t1)", letterSpacing: "-0.01em" }}>{selected.title}</div>
+                {selected.description && (
+                  <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t2)", marginTop: 6, lineHeight: 1.5 }}>{selected.description}</p>
                 )}
               </div>
 
               {/* Infos */}
-              <div className="bg-zinc-950 rounded-lg border border-zinc-800 divide-y divide-zinc-800">
+              <div style={{ background: "var(--s2)", border: "1px solid var(--b1)", borderRadius: "var(--r)", overflow: "hidden" }}>
                 {[
-                  { label: "Statut", value: statusConfig[selectedIncident.status]?.label },
-                  { label: "Environnement", value: selectedIncident.environment },
-                  { label: "Pod lié", value: selectedIncident.linked_pod || "—" },
-                  { label: "Assigné à", value: selectedIncident.assigned_to || "Non assigné" },
-                  { label: "Créé par", value: selectedIncident.created_by },
-                  { label: "Créé le", value: formatDate(selectedIncident.created_at) },
-                  { label: "MTTR", value: selectedIncident.mttr_seconds ? formatMttr(selectedIncident.mttr_seconds) : "En cours..." },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between px-4 py-2.5">
-                    <span className="text-xs text-zinc-500 font-mono">{label}</span>
-                    <span className="text-xs text-zinc-300 font-mono font-bold">{value}</span>
+                  ["Environnement", selected.environment],
+                  ["Pod lié", selected.linked_pod || "—"],
+                  ["Assigné à", selected.assigned_to || "—"],
+                  ["Canal Slack", selected.slack_channel || "—"],
+                  ["Créé le", fmtDate(selected.created_at)],
+                  ["MTTR", selected.mttr_seconds ? fmtMttr(selected.mttr_seconds) : "En cours..."],
+                ].map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", borderBottom: "1px solid var(--b1)" }}>
+                    <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>{k}</span>
+                    <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t2)", fontWeight: 500 }}>{v}</span>
                   </div>
                 ))}
               </div>
 
               {/* Actions statut */}
-              {selectedIncident.status !== "resolved" && (
-                <div className="space-y-2">
-                  <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider">Changer le statut</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {selectedIncident.status === "watching" && (
-                      <button
-                        onClick={() => updateStatus(selectedIncident.id, "open")}
-                        className="px-3 py-1.5 rounded border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 text-xs font-mono transition-all"
-                      >
-                        → Ouvrir
-                      </button>
+              {selected.status !== "resolved" && (
+                <div>
+                  <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 8 }}>
+                    Changer le statut
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {selected.status === "watching" && (
+                      <button onClick={() => updateStatus(selected.id, "open")} style={{
+                        padding: "5px 12px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 11, fontWeight: 500,
+                        cursor: "pointer", border: "1px solid rgba(200,75,50,0.3)", background: "var(--jam-a)", color: "var(--jam2)",
+                      }}>→ Ouvrir</button>
                     )}
-                    {(selectedIncident.status === "open" || selectedIncident.status === "watching") && (
-                      <button
-                        onClick={() => updateStatus(selectedIncident.id, "in_progress")}
-                        className="px-3 py-1.5 rounded border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10 text-xs font-mono transition-all"
-                      >
-                        → En cours
-                      </button>
+                    {(selected.status === "open" || selected.status === "watching") && (
+                      <button onClick={() => updateStatus(selected.id, "in_progress")} style={{
+                        padding: "5px 12px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 11, fontWeight: 500,
+                        cursor: "pointer", border: "1px solid rgba(200,136,10,0.3)", background: "var(--am-a)", color: "var(--am)",
+                      }}>→ En cours</button>
                     )}
-                    <button
-                      onClick={() => updateStatus(selectedIncident.id, "resolved")}
-                      className="px-3 py-1.5 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10 text-xs font-mono transition-all"
-                    >
-                      → Résoudre
-                    </button>
+                    {selected.status !== "watching" && (
+                      <button onClick={() => updateStatus(selected.id, "watching")} style={{
+                        padding: "5px 12px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 11, fontWeight: 500,
+                        cursor: "pointer", border: "1px solid rgba(58,120,192,0.3)", background: "var(--bl-a)", color: "var(--bl)",
+                      }}>👁 Surveiller</button>
+                    )}
+                    <button onClick={() => updateStatus(selected.id, "resolved")} style={{
+                      padding: "5px 12px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 11, fontWeight: 500,
+                      cursor: "pointer", border: "1px solid rgba(36,168,118,0.3)", background: "var(--g-a)", color: "var(--g)",
+                    }}>✓ Résoudre</button>
                   </div>
                 </div>
               )}
 
               {/* Timeline */}
               <div>
-                <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-3">Timeline</p>
-                <div className="space-y-3">
+                <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10 }}>
+                  Timeline
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   {timeline.map((entry, i) => (
-                    <div key={entry.id} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className="w-2 h-2 rounded-full bg-orange-500 shrink-0 mt-1" />
+                    <div key={entry.id} style={{ display: "flex", gap: 10 }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 16 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--jam)", flexShrink: 0, marginTop: 2 }} />
                         {i < timeline.length - 1 && (
-                          <div className="w-px flex-1 bg-zinc-800 mt-1" />
+                          <div style={{ width: 1, flex: 1, background: "var(--b2)", margin: "3px 0" }} />
                         )}
                       </div>
-                      <div className="pb-3 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-zinc-300 font-mono font-bold">{entry.action}</span>
-                          <span className="text-xs text-zinc-600 font-mono">{entry.author}</span>
+                      <div style={{ paddingBottom: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t1)", fontWeight: 500 }}>{entry.action}</span>
+                          <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)" }}>{entry.author}</span>
                         </div>
-                        <p className="text-xs text-zinc-500 mt-0.5">{entry.detail}</p>
-                        <p className="text-xs text-zinc-700 font-mono mt-0.5">{formatDate(entry.timestamp)}</p>
+                        {entry.detail && (
+                          <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t2)", marginTop: 2 }}>{entry.detail}</p>
+                        )}
+                        <p style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginTop: 2 }}>{fmtDate(entry.timestamp)}</p>
                       </div>
                     </div>
                   ))}
@@ -350,32 +412,42 @@ export default function Incidents() {
         </>
       )}
 
-      {/* Modal création */}
-      {showCreateModal && (
-        <CreateIncidentModal
-          onClose={() => setShowCreateModal(false)}
-          onCreated={() => { setShowCreateModal(false); fetchIncidents(); }}
-        />
+      {/* Create Modal */}
+      {showCreate && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--s1)", border: "1px solid var(--b2)", borderRadius: 10, width: "100%", maxWidth: 460, boxShadow: "0 25px 60px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--b1)" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>Créer un incident</span>
+              <button onClick={() => setShowCreate(false)} style={{ background: "none", border: "none", color: "var(--t3)", cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            <CreateForm onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); fetch(); }} />
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-// Modal de création d'incident
-function CreateIncidentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
-    title: "",
-    description: "",
-    severity: "medium",
-    source: "manual",
-    environment: "prod",
-    linked_pod: "",
-    assigned_to: "",
-    watch_minutes: 15,
+    title: "", description: "", severity: "medium", source: "manual",
+    environment: "prod", linked_pod: "", assigned_to: "", watch_minutes: 15,
   });
   const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async () => {
+  const inputStyle: React.CSSProperties = {
+    width: "100%", background: "var(--s2)", border: "1px solid var(--b2)",
+    borderRadius: "var(--r)", padding: "6px 10px",
+    fontFamily: "var(--fm)", fontSize: 11, color: "var(--t1)", outline: "none",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)",
+    textTransform: "uppercase" as const, letterSpacing: "0.1em",
+    display: "block", marginBottom: 4,
+  };
+
+  const submit = async () => {
     if (!form.title.trim()) return;
     setSaving(true);
     try {
@@ -386,184 +458,100 @@ function CreateIncidentModal({ onClose, onCreated }: { onClose: () => void; onCr
         watch_minutes: form.source === "watch" ? form.watch_minutes : null,
       });
       onCreated();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
   };
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-        <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-lg shadow-2xl">
-
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-            <div className="flex items-center gap-2">
-              <Plus size={15} className="text-orange-500" />
-              <span className="text-sm font-mono text-zinc-200 font-bold uppercase tracking-wide">
-                Créer un incident
-              </span>
-            </div>
-            <button onClick={onClose} className="p-1.5 rounded text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all">
-              <X size={15} />
-            </button>
-          </div>
-
-          <div className="p-6 space-y-4">
-
-            {/* Type d'incident */}
-            <div>
-              <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">
-                Type
-              </label>
-              <div className="flex gap-2">
-                {[
-                  { value: "manual", label: "👤 Manuel" },
-                  { value: "watch",  label: "👁 Surveillance" },
-                ].map((t) => (
-                  <button
-                    key={t.value}
-                    onClick={() => setForm({ ...form, source: t.value })}
-                    className={`flex-1 py-2 rounded border text-xs font-mono transition-all ${
-                      form.source === t.value
-                        ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
-                        : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Watch timer */}
-            {form.source === "watch" && (
-              <div>
-                <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">
-                  Timer de surveillance (minutes)
-                </label>
-                <input
-                  type="number"
-                  value={form.watch_minutes}
-                  onChange={(e) => setForm({ ...form, watch_minutes: parseInt(e.target.value) })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500"
-                />
-                <p className="text-xs text-zinc-600 mt-1">
-                  Si non résolu dans ce délai → incident ouvert automatiquement
-                </p>
-              </div>
-            )}
-
-            {/* Titre */}
-            <div>
-              <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">
-                Titre *
-              </label>
-              <input
-                type="text"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Ex: API gateway timeout en prod"
-                className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500 placeholder-zinc-700"
-              />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">
-                Description
-              </label>
-              <textarea
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                rows={3}
-                placeholder="Décris le problème observé..."
-                className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500 placeholder-zinc-700 resize-none"
-              />
-            </div>
-
-            {/* Sévérité + Environnement */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">
-                  Sévérité
-                </label>
-                <select
-                  value={form.severity}
-                  onChange={(e) => setForm({ ...form, severity: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">
-                  Environnement
-                </label>
-                <select
-                  value={form.environment}
-                  onChange={(e) => setForm({ ...form, environment: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500"
-                >
-                  <option value="prod">Production</option>
-                  <option value="staging">Staging</option>
-                  <option value="dev">Dev</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Pod lié + Assigné */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">
-                  Pod lié (optionnel)
-                </label>
-                <input
-                  type="text"
-                  value={form.linked_pod}
-                  onChange={(e) => setForm({ ...form, linked_pod: e.target.value })}
-                  placeholder="crash-app2"
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500 placeholder-zinc-700"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">
-                  Assigné à
-                </label>
-                <input
-                  type="text"
-                  value={form.assigned_to}
-                  onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
-                  placeholder="@username"
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500 placeholder-zinc-700"
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={onClose}
-                className="flex-1 py-2.5 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-100 text-sm font-mono transition-all"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={saving || !form.title.trim()}
-                className="flex-1 py-2.5 rounded bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-black font-bold text-sm font-mono transition-all"
-              >
-                {saving ? "Création..." : "Créer l'incident"}
-              </button>
-            </div>
-          </div>
+    <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* Type */}
+      <div>
+        <label style={labelStyle}>Type</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[{ v: "manual", l: "Manuel" }, { v: "watch", l: "Surveillance" }].map(t => (
+            <button key={t.v} onClick={() => setForm(p => ({ ...p, source: t.v }))} style={{
+              flex: 1, padding: "6px", borderRadius: 5,
+              fontFamily: "var(--fm)", fontSize: 11, cursor: "pointer",
+              border: form.source === t.v ? "1px solid var(--jam-b)" : "1px solid var(--b2)",
+              background: form.source === t.v ? "var(--jam-a)" : "transparent",
+              color: form.source === t.v ? "var(--jam2)" : "var(--t3)",
+              transition: "all 0.1s",
+            }}>{t.l}</button>
+          ))}
         </div>
       </div>
-    </>
+
+      {form.source === "watch" && (
+        <div>
+          <label style={labelStyle}>Timer surveillance (minutes)</label>
+          <input type="number" value={form.watch_minutes}
+            onChange={e => setForm(p => ({ ...p, watch_minutes: parseInt(e.target.value) }))}
+            style={inputStyle} />
+          <p style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginTop: 4 }}>
+            Si non résolu → incident ouvert automatiquement
+          </p>
+        </div>
+      )}
+
+      <div>
+        <label style={labelStyle}>Titre *</label>
+        <input type="text" value={form.title} placeholder="Ex: API gateway timeout en prod"
+          onChange={e => setForm(p => ({ ...p, title: e.target.value }))} style={inputStyle} />
+      </div>
+
+      <div>
+        <label style={labelStyle}>Description</label>
+        <textarea value={form.description} rows={3} placeholder="Décris le problème..."
+          onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+          style={{ ...inputStyle, resize: "none" as const }} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <label style={labelStyle}>Sévérité</label>
+          <select value={form.severity} onChange={e => setForm(p => ({ ...p, severity: e.target.value }))} style={inputStyle}>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Environnement</label>
+          <select value={form.environment} onChange={e => setForm(p => ({ ...p, environment: e.target.value }))} style={inputStyle}>
+            <option value="prod">prod</option>
+            <option value="staging">staging</option>
+            <option value="dev">dev</option>
+          </select>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <label style={labelStyle}>Pod lié</label>
+          <input type="text" value={form.linked_pod} placeholder="crash-app2"
+            onChange={e => setForm(p => ({ ...p, linked_pod: e.target.value }))} style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Assigné à</label>
+          <input type="text" value={form.assigned_to} placeholder="@username"
+            onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} style={inputStyle} />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+        <button onClick={onClose} style={{
+          padding: "6px 14px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 12, fontWeight: 500,
+          cursor: "pointer", border: "1px solid var(--b2)", background: "transparent", color: "var(--t2)",
+        }}>Annuler</button>
+        <button onClick={submit} disabled={saving || !form.title.trim()} style={{
+          padding: "6px 14px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 12, fontWeight: 500,
+          cursor: "pointer", border: "none", background: "var(--jam)", color: "#fff",
+          opacity: saving || !form.title.trim() ? 0.5 : 1,
+        }}>
+          {saving ? "Création..." : "Créer"}
+        </button>
+      </div>
+    </div>
   );
 }

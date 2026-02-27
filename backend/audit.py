@@ -1,4 +1,5 @@
 # Système d'audit log — enregistre chaque action de remédiation avec son contexte complet
+import os
 import sqlite3
 import json
 from datetime import datetime
@@ -6,6 +7,7 @@ from datetime import datetime
 DB_PATH = "data/audit.db"
 
 def init_audit_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (

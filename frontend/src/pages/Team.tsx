@@ -1,10 +1,5 @@
-// Page équipe — gestion des membres et on-call
 import { useState, useEffect } from "react";
 import axios from "axios";
-import {
-  Users, Plus, X, Shield, Mail,
-  Slack, RefreshCw, Star, UserCheck,
-} from "lucide-react";
 import API_URL from "../config";
 
 interface Member {
@@ -17,205 +12,288 @@ interface Member {
   created_at: string;
 }
 
-const roleConfig: Record<string, { label: string; color: string }> = {
-  engineer:  { label: "Engineer",   color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
-  lead:      { label: "Tech Lead",  color: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
-  manager:   { label: "Manager",    color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" },
-  devops:    { label: "DevOps",     color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
-  sre:       { label: "SRE",        color: "text-green-400 bg-green-500/10 border-green-500/20" },
+const ROLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  sre:      { label: "SRE",       color: "var(--g)",   bg: "var(--g-a)",   border: "rgba(36,168,118,0.2)" },
+  devops:   { label: "DevOps",    color: "var(--jam2)", bg: "var(--jam-a)", border: "var(--jam-b)" },
+  engineer: { label: "Engineer",  color: "var(--bl)",  bg: "var(--bl-a)",  border: "rgba(58,120,192,0.2)" },
+  lead:     { label: "Tech Lead", color: "var(--am)",  bg: "var(--am-a)",  border: "rgba(200,136,10,0.2)" },
+  manager:  { label: "Manager",   color: "var(--t2)",  bg: "var(--s2)",    border: "var(--b2)" },
+};
+
+const inp: React.CSSProperties = {
+  width: "100%", background: "var(--s2)", border: "1px solid var(--b2)",
+  borderRadius: "var(--r)", padding: "6px 10px",
+  fontFamily: "var(--fm)", fontSize: 11, color: "var(--t1)", outline: "none",
+};
+
+const lbl: React.CSSProperties = {
+  fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)",
+  textTransform: "uppercase", letterSpacing: "0.1em",
+  display: "block", marginBottom: 4,
 };
 
 export default function Team() {
   const [members, setMembers] = useState<Member[]>([]);
   const [oncall, setOncall] = useState<Member | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showOncallModal, setShowOncallModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [showOncall, setShowOncall] = useState(false);
 
-  useEffect(() => { fetchTeam(); }, []);
-
-  const fetchTeam = async () => {
+  const fetch = async () => {
     setLoading(true);
     try {
       const res = await axios.get(`${API_URL}/team`);
-      setMembers(res.data.members);
-      setOncall(res.data.oncall);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+      setMembers(res.data.members ?? []);
+      setOncall(res.data.oncall ?? null);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
+
+  useEffect(() => { fetch(); }, []);
 
   const deleteMember = async (id: number) => {
     await axios.delete(`${API_URL}/team/members/${id}`);
-    fetchTeam();
+    fetch();
   };
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
-      {/* En-tête */}
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <h1 className="text-xl font-bold text-zinc-100 tracking-tight">Équipe</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Gestion des membres et on-call</p>
+          <h1 style={{ fontSize: 17, fontWeight: 600, color: "var(--t1)", letterSpacing: "-0.02em" }}>Équipe</h1>
+          <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", marginTop: 2 }}>
+            // {members.length} membre{members.length !== 1 ? "s" : ""} · rotation on-call
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={fetchTeam}
-            className="flex items-center gap-2 px-3 py-2 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-100 text-sm font-mono transition-all"
-          >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold text-sm rounded transition-all font-mono"
-          >
-            <Plus size={15} />
-            Ajouter un membre
-          </button>
-        </div>
+        <button onClick={() => setShowAdd(true)} style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          padding: "5px 12px", borderRadius: 5,
+          fontFamily: "var(--f)", fontSize: 12, fontWeight: 500,
+          cursor: "pointer", border: "none",
+          background: "var(--jam)", color: "#fff",
+        }}>
+          + Membre
+        </button>
       </div>
 
-      {/* On-call actuel */}
-      <div className={`rounded-lg border p-5 ${
-        oncall
-          ? "bg-green-500/5 border-green-500/20"
-          : "bg-zinc-900 border-zinc-800"
-      }`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${oncall ? "bg-green-500/20" : "bg-zinc-800"}`}>
-              <Shield size={18} className={oncall ? "text-green-400" : "text-zinc-600"} />
-            </div>
-            <div>
-              <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider">On-Call maintenant</p>
-              {oncall ? (
-                <p className="text-lg font-bold text-green-400 font-mono">{oncall.name}</p>
-              ) : (
-                <p className="text-lg font-bold text-zinc-600 font-mono">Personne assigné</p>
-              )}
-              {oncall?.slack_username && (
-                <p className="text-xs text-zinc-500 font-mono">@{oncall.slack_username}</p>
-              )}
-            </div>
+      {/* On-call card */}
+      <div style={{
+        background: oncall ? "rgba(36,168,118,0.04)" : "var(--s1)",
+        border: oncall ? "1px solid rgba(36,168,118,0.14)" : "1px solid var(--b1)",
+        borderRadius: "var(--r)",
+        padding: "14px 16px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        transition: "all 0.2s",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Avatar large */}
+          <div style={{
+            width: 44, height: 44, borderRadius: "50%",
+            background: oncall ? "var(--g)" : "var(--b2)",
+            display: "grid", placeItems: "center",
+            fontSize: 16, fontWeight: 700,
+            color: oncall ? "#030a05" : "var(--t3)",
+            flexShrink: 0,
+            boxShadow: oncall ? "0 0 0 4px rgba(36,168,118,0.15)" : "none",
+            transition: "all 0.2s",
+          }}>
+            {oncall ? oncall.name.charAt(0).toUpperCase() : "?"}
           </div>
-          <button
-            onClick={() => setShowOncallModal(true)}
-            disabled={members.length === 0}
-            className="flex items-center gap-2 px-3 py-2 rounded border border-zinc-700 text-zinc-400 hover:text-orange-400 hover:border-orange-500/30 text-xs font-mono transition-all disabled:opacity-40"
-          >
-            <UserCheck size={13} />
-            Changer
-          </button>
+          <div>
+            <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: oncall ? "var(--g)" : "var(--t3)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 3 }}>
+              {oncall ? "● on-call maintenant" : "○ aucun on-call"}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: oncall ? "var(--t1)" : "var(--t3)", letterSpacing: "-0.01em" }}>
+              {oncall ? oncall.name : "Non assigné"}
+            </div>
+            {oncall?.slack_username && (
+              <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", marginTop: 2 }}>
+                @{oncall.slack_username}
+              </div>
+            )}
+          </div>
         </div>
+
+        <button
+          onClick={() => setShowOncall(true)}
+          disabled={members.length === 0}
+          style={{
+            padding: "5px 12px", borderRadius: 5,
+            fontFamily: "var(--f)", fontSize: 11, fontWeight: 500,
+            cursor: members.length === 0 ? "not-allowed" : "pointer",
+            border: "1px solid var(--b2)", background: "transparent",
+            color: "var(--t2)", opacity: members.length === 0 ? 0.4 : 1,
+            transition: "all 0.1s",
+          }}
+          onMouseEnter={e => { if (members.length > 0) { (e.currentTarget as HTMLElement).style.borderColor = "var(--b3)"; (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--b2)"; (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
+        >
+          Changer
+        </button>
       </div>
 
-      {/* Liste membres */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-zinc-800">
-          <Users size={15} className="text-orange-500" />
-          <span className="text-sm font-mono text-zinc-300 uppercase tracking-wide">
-            {members.length} membre{members.length !== 1 ? "s" : ""}
+      {/* Members list */}
+      <div style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 14px", borderBottom: "1px solid var(--b1)" }}>
+          <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--jam)" }} />
+          <span style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Membres
+          </span>
+          <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", background: "var(--s2)", border: "1px solid var(--b2)", padding: "1px 5px", borderRadius: 3 }}>
+            {members.length}
           </span>
         </div>
 
-        {members.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <Users size={32} className="text-zinc-700" />
-            <p className="text-zinc-600 font-mono text-sm">Aucun membre — ajoute ton équipe</p>
+        {loading ? (
+          <div style={{ padding: "32px 14px", textAlign: "center" }}>
+            <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Chargement...</p>
           </div>
-        ) : (
-          <div className="divide-y divide-zinc-800">
-            {members.map((member) => {
-              const role = roleConfig[member.role] || roleConfig.engineer;
-              const isOncall = oncall?.id === member.id;
+        ) : members.length === 0 ? (
+          <div style={{ padding: "40px 14px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--s2)", border: "1px solid var(--b2)", display: "grid", placeItems: "center" }}>
+              <span style={{ color: "var(--t3)", fontSize: 16 }}>?</span>
+            </div>
+            <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Aucun membre — ajoute ton équipe</p>
+          </div>
+        ) : members.map((m) => {
+          const role = ROLES[m.role] || ROLES.engineer;
+          const isOncall = oncall?.id === m.id;
 
-              return (
-                <div key={member.id} className="flex items-center gap-4 px-5 py-4 hover:bg-zinc-800/50 transition-all">
+          return (
+            <div
+              key={m.id}
+              style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "10px 14px", borderBottom: "1px solid var(--b1)",
+                transition: "background 0.08s",
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--s2)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+            >
+              {/* Avatar */}
+              <div style={{
+                width: 32, height: 32, borderRadius: "50%",
+                background: isOncall ? "var(--g)" : "var(--s3)",
+                border: isOncall ? "1px solid rgba(36,168,118,0.3)" : "1px solid var(--b2)",
+                display: "grid", placeItems: "center",
+                fontSize: 12, fontWeight: 700,
+                color: isOncall ? "#030a05" : "var(--t2)",
+                flexShrink: 0,
+                transition: "all 0.15s",
+              }}>
+                {m.name.charAt(0).toUpperCase()}
+              </div>
 
-                  {/* Avatar */}
-                  <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold text-zinc-300">
-                      {member.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-
-                  {/* Infos */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-zinc-100">{member.name}</span>
-                      {isOncall && (
-                        <span className="flex items-center gap-1 text-xs text-green-400 font-mono px-1.5 py-0.5 rounded bg-green-500/10 border border-green-500/20">
-                          <Star size={9} fill="currentColor" />
-                          on-call
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      {member.email && (
-                        <span className="flex items-center gap-1 text-xs text-zinc-500 font-mono">
-                          <Mail size={9} />
-                          {member.email}
-                        </span>
-                      )}
-                      {member.slack_username && (
-                        <span className="flex items-center gap-1 text-xs text-zinc-500 font-mono">
-                          <Slack size={9} />
-                          @{member.slack_username}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Rôle */}
-                  <span className={`text-xs font-mono px-2 py-0.5 rounded border ${role.color}`}>
-                    {role.label}
+              {/* Info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--t1)", letterSpacing: "-0.01em" }}>
+                    {m.name}
                   </span>
-
-                  {/* Supprimer */}
-                  <button
-                    onClick={() => deleteMember(member.id)}
-                    className="p-1.5 rounded text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                  >
-                    <X size={13} />
-                  </button>
+                  {isOncall && (
+                    <span style={{
+                      fontFamily: "var(--fm)", fontSize: 8, color: "var(--g)",
+                      background: "var(--g-a)", border: "1px solid rgba(36,168,118,0.2)",
+                      padding: "1px 5px", borderRadius: 3,
+                      textTransform: "uppercase", letterSpacing: "0.08em",
+                    }}>
+                      on-call
+                    </span>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
+                  {m.email && (
+                    <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>
+                      {m.email}
+                    </span>
+                  )}
+                  {m.slack_username && (
+                    <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>
+                      @{m.slack_username}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Role */}
+              <span style={{
+                display: "inline-flex", alignItems: "center",
+                padding: "2px 7px", borderRadius: 3,
+                fontFamily: "var(--fm)", fontSize: 9, fontWeight: 500, letterSpacing: "0.05em",
+                color: role.color, background: role.bg, border: `1px solid ${role.border}`,
+                flexShrink: 0,
+              }}>
+                {role.label}
+              </span>
+
+              {/* Delete */}
+              <button
+                onClick={() => deleteMember(m.id)}
+                style={{
+                  width: 26, height: 26, borderRadius: 4,
+                  border: "1px solid transparent", background: "transparent",
+                  color: "var(--t3)", cursor: "pointer", fontSize: 14,
+                  display: "grid", placeItems: "center",
+                  transition: "all 0.1s", flexShrink: 0,
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--re)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(184,56,56,0.2)"; (e.currentTarget as HTMLElement).style.background = "var(--re-a)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; (e.currentTarget as HTMLElement).style.borderColor = "transparent"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Modal ajout membre */}
-      {showAddModal && (
-        <AddMemberModal
-          onClose={() => setShowAddModal(false)}
-          onAdded={() => { setShowAddModal(false); fetchTeam(); }}
-        />
+      {/* Add modal */}
+      {showAdd && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--s1)", border: "1px solid var(--b2)", borderRadius: 10, width: "100%", maxWidth: 400, boxShadow: "0 25px 60px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--b1)" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>Ajouter un membre</span>
+              <button onClick={() => setShowAdd(false)} style={{ background: "none", border: "none", color: "var(--t3)", cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            <AddForm onClose={() => setShowAdd(false)} onAdded={() => { setShowAdd(false); fetch(); }} />
+          </div>
+        </div>
       )}
 
-      {/* Modal on-call */}
-      {showOncallModal && (
-        <SetOncallModal
-          members={members}
-          onClose={() => setShowOncallModal(false)}
-          onSet={() => { setShowOncallModal(false); fetchTeam(); }}
-        />
+      {/* Oncall modal */}
+      {showOncall && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--s1)", border: "1px solid var(--b2)", borderRadius: 10, width: "100%", maxWidth: 400, boxShadow: "0 25px 60px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--b1)" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>Définir l'on-call</span>
+              <button onClick={() => setShowOncall(false)} style={{ background: "none", border: "none", color: "var(--t3)", cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            <OncallForm members={members} onClose={() => setShowOncall(false)} onSet={() => { setShowOncall(false); fetch(); }} />
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-// Modal ajout membre
-function AddMemberModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
-  const [form, setForm] = useState({
-    name: "", email: "", slack_username: "", role: "engineer"
-  });
+function AddForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [form, setForm] = useState({ name: "", email: "", slack_username: "", role: "engineer" });
   const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async () => {
+  const inp: React.CSSProperties = {
+    width: "100%", background: "var(--s2)", border: "1px solid var(--b2)",
+    borderRadius: "var(--r)", padding: "6px 10px",
+    fontFamily: "var(--fm)", fontSize: 11, color: "var(--t1)", outline: "none",
+  };
+
+  const lbl: React.CSSProperties = {
+    fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)",
+    textTransform: "uppercase", letterSpacing: "0.1em",
+    display: "block", marginBottom: 4,
+  };
+
+  const submit = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
@@ -225,159 +303,108 @@ function AddMemberModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
         slack_username: form.slack_username || null,
       });
       onAdded();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
   };
 
-  const inputClass = "w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500 placeholder-zinc-700";
-
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <div className="flex items-center gap-2">
-            <Plus size={15} className="text-orange-500" />
-            <span className="text-sm font-mono text-zinc-200 font-bold uppercase tracking-wide">
-              Ajouter un membre
-            </span>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all">
-            <X size={15} />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">Nom *</label>
-            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Alice Dupont" className={inputClass} />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">Email</label>
-            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="alice@company.com" className={inputClass} />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">Username Slack</label>
-            <input type="text" value={form.slack_username} onChange={(e) => setForm({ ...form, slack_username: e.target.value })}
-              placeholder="alice.dupont" className={inputClass} />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">Rôle</label>
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className={inputClass}>
-              <option value="engineer">Engineer</option>
-              <option value="sre">SRE</option>
-              <option value="devops">DevOps</option>
-              <option value="lead">Tech Lead</option>
-              <option value="manager">Manager</option>
-            </select>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button onClick={onClose}
-              className="flex-1 py-2.5 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-100 text-sm font-mono transition-all">
-              Annuler
-            </button>
-            <button onClick={handleSubmit} disabled={saving || !form.name.trim()}
-              className="flex-1 py-2.5 rounded bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-black font-bold text-sm font-mono transition-all">
-              {saving ? "Ajout..." : "Ajouter"}
-            </button>
-          </div>
-        </div>
+    <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div><label style={lbl}>Nom *</label><input type="text" value={form.name} placeholder="Alice Dupont" onChange={e => setForm(p => ({ ...p, name: e.target.value }))} style={inp} /></div>
+      <div><label style={lbl}>Email</label><input type="email" value={form.email} placeholder="alice@company.com" onChange={e => setForm(p => ({ ...p, email: e.target.value }))} style={inp} /></div>
+      <div><label style={lbl}>Username Slack</label><input type="text" value={form.slack_username} placeholder="alice.dupont" onChange={e => setForm(p => ({ ...p, slack_username: e.target.value }))} style={inp} /></div>
+      <div>
+        <label style={lbl}>Rôle</label>
+        <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))} style={inp}>
+          <option value="sre">SRE</option>
+          <option value="devops">DevOps</option>
+          <option value="engineer">Engineer</option>
+          <option value="lead">Tech Lead</option>
+          <option value="manager">Manager</option>
+        </select>
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+        <button onClick={onClose} style={{ padding: "6px 14px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 12, fontWeight: 500, cursor: "pointer", border: "1px solid var(--b2)", background: "transparent", color: "var(--t2)" }}>Annuler</button>
+        <button onClick={submit} disabled={saving || !form.name.trim()} style={{ padding: "6px 14px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 12, fontWeight: 500, cursor: "pointer", border: "none", background: "var(--jam)", color: "#fff", opacity: saving || !form.name.trim() ? 0.5 : 1 }}>
+          {saving ? "Ajout..." : "Ajouter"}
+        </button>
       </div>
     </div>
   );
 }
 
-// Modal set on-call
-function SetOncallModal({ members, onClose, onSet }: { members: Member[]; onClose: () => void; onSet: () => void }) {
+function OncallForm({ members, onClose, onSet }: { members: Member[]; onClose: () => void; onSet: () => void }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async () => {
+  const inp: React.CSSProperties = {
+    width: "100%", background: "var(--s2)", border: "1px solid var(--b2)",
+    borderRadius: "var(--r)", padding: "6px 10px",
+    fontFamily: "var(--fm)", fontSize: 11, color: "var(--t1)", outline: "none",
+  };
+
+  const lbl: React.CSSProperties = {
+    fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)",
+    textTransform: "uppercase", letterSpacing: "0.1em",
+    display: "block", marginBottom: 4,
+  };
+
+  const submit = async () => {
     if (!selectedId || !endDate) return;
     setSaving(true);
     try {
-      await axios.post(`${API_URL}/team/oncall`, {
-        member_id: selectedId,
-        start_date: startDate,
-        end_date: endDate,
-      });
+      await axios.post(`${API_URL}/team/oncall`, { member_id: selectedId, start_date: startDate, end_date: endDate });
       onSet();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
   };
 
-  const inputClass = "w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-orange-500";
-
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <div className="flex items-center gap-2">
-            <Shield size={15} className="text-orange-500" />
-            <span className="text-sm font-mono text-zinc-200 font-bold uppercase tracking-wide">
-              Définir l'on-call
-            </span>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all">
-            <X size={15} />
-          </button>
+    <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div>
+        <label style={lbl}>Membre *</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          {members.map(m => (
+            <div
+              key={m.id}
+              onClick={() => setSelectedId(m.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 10px", borderRadius: "var(--r)", cursor: "pointer",
+                border: selectedId === m.id ? "1px solid var(--jam-b)" : "1px solid var(--b2)",
+                background: selectedId === m.id ? "var(--jam-a)" : "transparent",
+                transition: "all 0.1s",
+              }}
+            >
+              <div style={{
+                width: 26, height: 26, borderRadius: "50%",
+                background: selectedId === m.id ? "var(--jam)" : "var(--s2)",
+                display: "grid", placeItems: "center",
+                fontSize: 10, fontWeight: 700,
+                color: selectedId === m.id ? "#fff" : "var(--t2)",
+              }}>
+                {m.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: selectedId === m.id ? "var(--jam2)" : "var(--t1)" }}>{m.name}</div>
+                {m.slack_username && <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)" }}>@{m.slack_username}</div>}
+              </div>
+            </div>
+          ))}
         </div>
+      </div>
 
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">Membre *</label>
-            <div className="space-y-2">
-              {members.map((m) => (
-                <button key={m.id} onClick={() => setSelectedId(m.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded border text-left transition-all ${
-                    selectedId === m.id
-                      ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
-                      : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
-                  }`}>
-                  <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
-                    <span className="text-xs font-bold">{m.name.charAt(0)}</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold font-mono">{m.name}</p>
-                    {m.slack_username && <p className="text-xs text-zinc-500 font-mono">@{m.slack_username}</p>}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div><label style={lbl}>Début</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inp} /></div>
+        <div><label style={lbl}>Fin *</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={inp} /></div>
+      </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">Début</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-500 font-mono uppercase tracking-wider mb-2 block">Fin *</label>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputClass} />
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button onClick={onClose}
-              className="flex-1 py-2.5 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-100 text-sm font-mono transition-all">
-              Annuler
-            </button>
-            <button onClick={handleSubmit} disabled={saving || !selectedId || !endDate}
-              className="flex-1 py-2.5 rounded bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-black font-bold text-sm font-mono transition-all">
-              {saving ? "Sauvegarde..." : "Confirmer"}
-            </button>
-          </div>
-        </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+        <button onClick={onClose} style={{ padding: "6px 14px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 12, fontWeight: 500, cursor: "pointer", border: "1px solid var(--b2)", background: "transparent", color: "var(--t2)" }}>Annuler</button>
+        <button onClick={submit} disabled={saving || !selectedId || !endDate} style={{ padding: "6px 14px", borderRadius: 5, fontFamily: "var(--f)", fontSize: 12, fontWeight: 500, cursor: "pointer", border: "none", background: "var(--jam)", color: "#fff", opacity: saving || !selectedId || !endDate ? 0.5 : 1 }}>
+          {saving ? "Sauvegarde..." : "Confirmer"}
+        </button>
       </div>
     </div>
   );

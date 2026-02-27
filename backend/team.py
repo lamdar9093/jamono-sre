@@ -1,10 +1,12 @@
 # Gestion de l'équipe — membres, on-call actuel et rotations
+import os
 import sqlite3
 from datetime import datetime
 
 DB_PATH = "data/team.db"
 
 def init_team_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS members (

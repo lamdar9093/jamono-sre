@@ -1,4 +1,5 @@
 # Système de gestion des incidents — modèle de données, CRUD et cycle de vie complet
+import os
 import sqlite3
 import json
 from datetime import datetime
@@ -6,6 +7,7 @@ from datetime import datetime
 DB_PATH = "data/incidents.db"
 
 def init_incidents_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS incidents (

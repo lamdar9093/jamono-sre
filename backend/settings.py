@@ -2,7 +2,7 @@
 import sqlite3
 import json
 
-DB_PATH = "settings.db"
+DB_PATH = "data/settings.db"
 
 DEFAULTS = {
     # Général

@@ -3,7 +3,7 @@ import sqlite3
 import json
 from datetime import datetime
 
-DB_PATH = "audit.db"
+DB_PATH = "data/audit.db"
 
 def init_audit_db():
     conn = sqlite3.connect(DB_PATH)

@@ -2,7 +2,7 @@
 import sqlite3
 from datetime import datetime
 
-DB_PATH = "team.db"
+DB_PATH = "data/team.db"
 
 def init_team_db():
     conn = sqlite3.connect(DB_PATH)

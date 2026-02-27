@@ -69,17 +69,6 @@ function fmtMttr(s: number) {
   return `${Math.floor(s/3600)}h${Math.floor((s%3600)/60)}m`;
 }
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  background: "var(--s2)",
-  border: "1px solid var(--b2)",
-  borderRadius: "var(--r)",
-  padding: "6px 10px",
-  fontFamily: "var(--fm)",
-  fontSize: 11,
-  color: "var(--t1)",
-  outline: "none",
-};
 
 export default function Incidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);

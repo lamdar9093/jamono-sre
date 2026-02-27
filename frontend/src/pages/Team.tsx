@@ -20,17 +20,6 @@ const ROLES: Record<string, { label: string; color: string; bg: string; border: 
   manager:  { label: "Manager",   color: "var(--t2)",  bg: "var(--s2)",    border: "var(--b2)" },
 };
 
-const inp: React.CSSProperties = {
-  width: "100%", background: "var(--s2)", border: "1px solid var(--b2)",
-  borderRadius: "var(--r)", padding: "6px 10px",
-  fontFamily: "var(--fm)", fontSize: 11, color: "var(--t1)", outline: "none",
-};
-
-const lbl: React.CSSProperties = {
-  fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)",
-  textTransform: "uppercase", letterSpacing: "0.1em",
-  display: "block", marginBottom: 4,
-};
 
 export default function Team() {
   const [members, setMembers] = useState<Member[]>([]);

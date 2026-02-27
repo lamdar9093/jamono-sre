@@ -210,7 +210,6 @@ export default function Dashboard() {
                 );
               })}
             </div>
-
             {/* Health bar */}
             <div style={{
               padding: "8px 14px",
@@ -235,6 +234,9 @@ export default function Dashboard() {
           </>
         )}
       </div>
+
+      {/* Incidents récents */}
+      <IncidentsWidget />
 
       {/* Remediation Modal */}
       {modal && (
@@ -282,6 +284,134 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function IncidentsWidget() {
+  const [incidents, setIncidents] = useState<any[]>([]);
+
+  useEffect(() => {
+    axios.get(`${API_URL}/incidents`)
+      .then(r => setIncidents((r.data.incidents || []).slice(0, 5)))
+      .catch(() => {});
+  }, []);
+
+  if (incidents.length === 0) return null;
+
+  const SEV: Record<string, string> = {
+    critical: "#EF4444",
+    high:     "var(--jam2)",
+    medium:   "var(--am)",
+    low:      "var(--bl)",
+  };
+
+  const STA: Record<string, { color: string; label: string }> = {
+    open:        { color: "var(--re)",  label: "Ouvert" },
+    in_progress: { color: "var(--am)",  label: "En cours" },
+    resolved:    { color: "var(--g)",   label: "Résolu" },
+    watching:    { color: "var(--bl)",  label: "Surveillance" },
+  };
+
+  function ago(d: string) {
+    const s = (Date.now() - new Date(d).getTime()) / 1000;
+    if (s < 3600) return `${Math.floor(s/60)}min`;
+    if (s < 86400) return `${Math.floor(s/3600)}h`;
+    return `${Math.floor(s/86400)}j`;
+  }
+
+  return (
+    <div style={{
+      background: "var(--s1)", border: "1px solid var(--b1)",
+      borderRadius: "var(--r)", overflow: "hidden",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "9px 14px", borderBottom: "1px solid var(--b1)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--jam)" }} />
+          <span style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Incidents récents
+          </span>
+        </div>
+        <a href="/incidents" style={{
+          fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)",
+          textDecoration: "none", letterSpacing: "0.06em",
+          transition: "color 0.1s",
+        }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--t2)"}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--t3)"}
+        >
+          Voir tout →
+        </a>
+      </div>
+
+      {incidents.map((inc, i) => {
+        const s = STA[inc.status] || STA.open;
+        const sevColor = SEV[inc.severity] || "var(--t2)";
+        const pulse = inc.status === "open" || inc.status === "in_progress";
+        return (
+          <div key={inc.id} style={{
+            display: "grid",
+            gridTemplateColumns: "28px 72px 1fr 90px 48px",
+            alignItems: "center",
+            padding: "8px 14px", gap: 10,
+            borderBottom: i < incidents.length - 1 ? "1px solid var(--b1)" : "none",
+            transition: "background 0.08s",
+          }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--s2)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+          >
+            <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>
+              #{inc.id}
+            </span>
+
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 3,
+              padding: "2px 6px", borderRadius: 3,
+              fontFamily: "var(--fm)", fontSize: 9, fontWeight: 500,
+              color: sevColor,
+              background: `${sevColor}18`,
+              border: `1px solid ${sevColor}30`,
+            }}>
+              <span style={{ width: 4, height: 4, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
+              {inc.severity}
+            </span>
+
+            <span style={{
+              fontFamily: "var(--f)", fontSize: 12, fontWeight: 500,
+              color: "var(--t1)", overflow: "hidden",
+              textOverflow: "ellipsis", whiteSpace: "nowrap",
+              letterSpacing: "-0.01em",
+            }}>
+              {inc.title}
+            </span>
+
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              padding: "2px 7px", borderRadius: 3,
+              fontFamily: "var(--fm)", fontSize: 9, fontWeight: 500,
+              color: s.color,
+              background: `${s.color}15`,
+            }}>
+              <span style={{
+                width: 4, height: 4, borderRadius: "50%",
+                background: "currentColor", display: "inline-block",
+                animation: pulse ? "blink 2s ease-in-out infinite" : "none",
+              }} />
+              {s.label}
+            </span>
+
+            <span style={{
+              fontFamily: "var(--fm)", fontSize: 10,
+              color: "var(--t3)", textAlign: "right",
+            }}>
+              {ago(inc.created_at)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

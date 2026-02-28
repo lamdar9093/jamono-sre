@@ -33,10 +33,18 @@ export default function CopilotDrawer({ open }: { open: boolean }) {
     }
   };
 
+  const suggestions = [
+    "Analyse les pods en erreur",
+    "Quel est le statut du cluster ?",
+    "Propose une remédiation",
+    "Rédige un message Slack pour l'incident",
+    "Résume les incidents ouverts",
+  ];
+
   return (
     <div style={{
       position: "fixed",
-      top: 44, // topbar height
+      top: 48,
       right: 0,
       width: 342,
       bottom: 0,
@@ -51,18 +59,30 @@ export default function CopilotDrawer({ open }: { open: boolean }) {
 
       {/* Header */}
       <div style={{
-        padding: "10px 14px",
+        padding: "12px 16px",
         borderBottom: "1px solid var(--b1)",
         display: "flex",
         alignItems: "center",
-        gap: 7,
+        gap: 8,
         flexShrink: 0,
       }}>
-        <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--bl)" }} />
-        <span style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+        <div style={{
+          width: 7, height: 7, borderRadius: "50%",
+          background: "var(--brand)",
+          boxShadow: "0 0 8px rgba(59,130,246,0.5)",
+          animation: "pulse 2s infinite",
+        }} />
+        <span style={{
+          fontFamily: "var(--fm)", fontSize: 10, color: "var(--t1)",
+          textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700,
+        }}>
           SRE Copilot
         </span>
-        <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginLeft: "auto" }}>
+        <span style={{
+          fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginLeft: "auto",
+          background: "var(--s2)", border: "1px solid var(--b2)",
+          padding: "2px 7px", borderRadius: 4,
+        }}>
           IA · jamono
         </span>
       </div>
@@ -71,40 +91,45 @@ export default function CopilotDrawer({ open }: { open: boolean }) {
       <div style={{
         flex: 1,
         overflowY: "auto",
-        padding: "12px",
+        padding: "14px",
         display: "flex",
         flexDirection: "column",
-        gap: 8,
+        gap: 10,
       }}>
         {messages.length === 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
-            <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", marginBottom: 8 }}>
-              Pose une question sur ton cluster ou tes incidents.
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+            <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", marginBottom: 8, lineHeight: 1.5 }}>
+              Pose une question sur ton cluster, tes incidents, ou demande une comm Slack.
             </p>
-            {[
-              "Analyse les pods en erreur",
-              "Quel est le statut du cluster ?",
-              "Propose une remédiation",
-            ].map(s => (
-              <div
+            {suggestions.map(s => (
+              <button
                 key={s}
-                onClick={() => setInput(s)}
+                onClick={() => { setInput(s); }}
                 style={{
-                  padding: "7px 10px",
+                  padding: "9px 12px",
                   background: "var(--s2)",
                   border: "1px solid var(--b2)",
                   borderRadius: "var(--r)",
                   fontFamily: "var(--fm)",
-                  fontSize: 10,
+                  fontSize: 11,
                   color: "var(--t2)",
                   cursor: "pointer",
-                  transition: "all 0.1s",
+                  transition: "all 0.12s",
+                  textAlign: "left",
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--b3)"; (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--b2)"; (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.borderColor = "var(--brand-b)";
+                  (e.currentTarget as HTMLElement).style.color = "var(--t1)";
+                  (e.currentTarget as HTMLElement).style.background = "var(--brand-a)";
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.borderColor = "var(--b2)";
+                  (e.currentTarget as HTMLElement).style.color = "var(--t2)";
+                  (e.currentTarget as HTMLElement).style.background = "var(--s2)";
+                }}
               >
                 {s}
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -116,24 +141,24 @@ export default function CopilotDrawer({ open }: { open: boolean }) {
           }}>
             {m.role === "assistant" && (
               <div style={{
-                width: 18, height: 18, borderRadius: "50%",
-                background: "var(--bl-a)", border: "1px solid rgba(58,120,192,0.2)",
+                width: 22, height: 22, borderRadius: 6,
+                background: "var(--brand-a)", border: "1px solid rgba(59,130,246,0.2)",
                 display: "grid", placeItems: "center",
-                flexShrink: 0, marginRight: 6, marginTop: 2,
+                flexShrink: 0, marginRight: 8, marginTop: 2,
               }}>
-                <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--bl)" }} />
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }} />
               </div>
             )}
             <div style={{
-              maxWidth: "80%",
-              padding: "7px 10px",
-              borderRadius: m.role === "user" ? "8px 8px 2px 8px" : "8px 8px 8px 2px",
-              background: m.role === "user" ? "var(--jam-a)" : "var(--s2)",
-              border: `1px solid ${m.role === "user" ? "var(--jam-b)" : "var(--b2)"}`,
+              maxWidth: "82%",
+              padding: "9px 12px",
+              borderRadius: m.role === "user" ? "10px 10px 3px 10px" : "10px 10px 10px 3px",
+              background: m.role === "user" ? "var(--brand-a)" : "var(--s2)",
+              border: `1px solid ${m.role === "user" ? "var(--brand-b)" : "var(--b2)"}`,
               fontFamily: "var(--fm)",
-              fontSize: 11,
+              fontSize: 11.5,
               color: "var(--t1)",
-              lineHeight: 1.6,
+              lineHeight: 1.65,
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",
             }}>
@@ -143,15 +168,15 @@ export default function CopilotDrawer({ open }: { open: boolean }) {
         ))}
 
         {loading && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{
-              width: 18, height: 18, borderRadius: "50%",
-              background: "var(--bl-a)", border: "1px solid rgba(58,120,192,0.2)",
+              width: 22, height: 22, borderRadius: 6,
+              background: "var(--brand-a)", border: "1px solid rgba(59,130,246,0.2)",
               display: "grid", placeItems: "center", flexShrink: 0,
             }}>
-              <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--bl)" }} />
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }} />
             </div>
-            <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>
+            <div style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>
               analyse en cours
               <span style={{ animation: "blink 1s infinite" }}>...</span>
             </div>
@@ -162,10 +187,10 @@ export default function CopilotDrawer({ open }: { open: boolean }) {
 
       {/* Input */}
       <div style={{
-        padding: "8px 10px",
+        padding: "10px 12px",
         borderTop: "1px solid var(--b1)",
         display: "flex",
-        gap: 6,
+        gap: 8,
         flexShrink: 0,
         background: "var(--s1)",
       }}>
@@ -178,35 +203,38 @@ export default function CopilotDrawer({ open }: { open: boolean }) {
             flex: 1,
             background: "var(--s2)",
             border: "1px solid var(--b2)",
-            borderRadius: 5,
-            padding: "6px 10px",
+            borderRadius: "var(--r)",
+            padding: "8px 12px",
             fontFamily: "var(--fm)",
-            fontSize: 11,
+            fontSize: 11.5,
             color: "var(--t1)",
             outline: "none",
+            transition: "border-color 0.15s",
           }}
+          onFocus={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--brand-b)"}
+          onBlur={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--b2)"}
         />
         <button
           onClick={send}
           disabled={loading || !input.trim()}
           style={{
-            width: 30, height: 30,
-            borderRadius: 5,
-            background: input.trim() ? "var(--jam)" : "var(--s2)",
-            border: "none", cursor: "pointer",
+            width: 34, height: 34,
+            borderRadius: "var(--r)",
+            background: input.trim() ? "var(--brand)" : "var(--s2)",
+            border: input.trim() ? "none" : "1px solid var(--b2)",
+            cursor: loading ? "not-allowed" : "pointer",
             display: "grid", placeItems: "center",
             opacity: loading ? 0.5 : 1,
-            transition: "all 0.1s",
+            transition: "all 0.15s",
             flexShrink: 0,
+            boxShadow: input.trim() ? "0 2px 8px rgba(59,130,246,0.3)" : "none",
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round">
-            <path d="M2 7h10M8 3l4 4-4 4"/>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M3 8h10M9 4l4 4-4 4"/>
           </svg>
         </button>
       </div>
-
-      <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
     </div>
   );
 }

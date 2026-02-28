@@ -1,31 +1,143 @@
+/* ═══════════════════════════════════════════
+   JAMONO — Design System v3
+   Palette: Slate-Navy (cool, easy on eyes)
+   ═══════════════════════════════════════════ */
+
 :root {
-  --bg:    #111110;
-  --s1:    #171615;
-  --s2:    #1D1C1B;
-  --s3:    #232221;
-  --b1:    #2A2927;
-  --b2:    #353432;
-  --b3:    #414040;
+  /* ── Backgrounds (cool slate, NOT warm brown) ── */
+  --bg:    #0B0E14;      /* Main background */
+  --s1:    #111620;      /* Surface 1 — sidebar, cards */
+  --s2:    #161B27;      /* Surface 2 — inputs, elevated */
+  --s3:    #1C2235;      /* Surface 3 — hover states */
 
-  --t1:    #EDE9E4;
-  --t2:    #9B9490;
-  --t3:    #605C58;
+  /* ── Borders ── */
+  --b1:    #1E2536;      /* Primary border */
+  --b2:    #252D3F;      /* Secondary border */
+  --b3:    #2E3850;      /* Tertiary / hover border */
 
-  --jam:   #CC7A52;
-  --jam2:  #D4956A;
-  --jam-a: rgba(204,122,82,0.12);
-  --jam-b: rgba(204,122,82,0.25);
+  /* ── Text ── */
+  --t1:    #E8ECF4;      /* Primary text */
+  --t2:    #8B95A9;      /* Secondary text */
+  --t3:    #5A6478;      /* Muted text */
 
-  --g:     #22C55E;
-  --g-a:   rgba(34,197,94,0.09);
-  --am:    #EAB308;
-  --am-a:  rgba(234,179,8,0.09);
-  --re:    #EF4444;
-  --re-a:  rgba(239,68,68,0.09);
-  --bl:    #3B82F6;
-  --bl-a:  rgba(59,130,246,0.09);
+  /* ── Brand — Blue (trust, stability, tech) ── */
+  --brand:   #3B82F6;
+  --brand2:  #60A5FA;     /* Lighter brand */
+  --brand-a: rgba(59,130,246,0.12);
+  --brand-b: rgba(59,130,246,0.25);
 
-  --f:     'Geist', sans-serif;
-  --fm:    'Geist Mono', monospace;
-  --r:     6px;
+  /* ── Legacy aliases (so existing components don't break) ── */
+  --jam:   #3B82F6;       /* Was orange, now brand blue */
+  --jam2:  #60A5FA;       /* Was light orange, now light blue */
+  --jam-a: rgba(59,130,246,0.12);
+  --jam-b: rgba(59,130,246,0.25);
+
+  /* ── Semantic colors ── */
+  --g:     #34D399;       /* Success / healthy */
+  --g-a:   rgba(52,211,153,0.10);
+  --am:    #FBBF24;       /* Warning / amber */
+  --am-a:  rgba(251,191,36,0.10);
+  --re:    #F87171;       /* Error / danger */
+  --re-a:  rgba(248,113,113,0.10);
+  --bl:    #60A5FA;       /* Info / blue */
+  --bl-a:  rgba(96,165,250,0.10);
+
+  /* ── Severity ── */
+  --sev-critical:     #EF4444;
+  --sev-critical-a:   rgba(239,68,68,0.12);
+  --sev-high:         #F97316;
+  --sev-high-a:       rgba(249,115,22,0.12);
+  --sev-medium:       #FBBF24;
+  --sev-medium-a:     rgba(251,191,36,0.12);
+  --sev-low:          #60A5FA;
+  --sev-low-a:        rgba(96,165,250,0.12);
+
+  /* ── Cloud providers ── */
+  --aws:     #FF9900;
+  --azure:   #0078D4;
+  --gcp:     #4285F4;
+  --rancher: #0075A8;
+  --k3s:     #FFC61C;
+
+  /* ── Integrations ── */
+  --slack:   #E01E5A;
+  --slack-a: rgba(224,30,90,0.10);
+
+  /* ── Extras ── */
+  --purple:   #A78BFA;
+  --purple-a: rgba(167,139,250,0.12);
+
+  /* ── Typography ── */
+  --f:     'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --fm:    'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+
+  /* ── Radius ── */
+  --r:     8px;
+}
+
+/* ── Reset & Base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--t1);
+  font-family: var(--f);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--b2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--b3);
+}
+
+/* ── Animations ── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Selection ── */
+::selection {
+  background: var(--brand-b);
+  color: var(--t1);
 }

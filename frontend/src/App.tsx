@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Sidebar from "./components/layout/Sidebar";
 import TopBar from "./components/layout/TopBar";
@@ -9,96 +9,111 @@ import Settings from "./pages/Settings";
 import Team from "./pages/Team";
 import CopilotDrawer from "./components/CopilotDrawer";
 
-function App() {
+function AppLayout() {
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const navigate = useNavigate();
 
   return (
-    <BrowserRouter>
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "188px 1fr",
-        height: "100vh",
-        overflow: "hidden",
-        background: "var(--bg)",
-        color: "var(--t1)",
-        fontFamily: "var(--f)"
-      }}>
-        <Sidebar />
-        <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-          <TopBar />
-          <main style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "18px",
-            paddingRight: copilotOpen ? "338px" : "18px",
-            background: "var(--bg)",
-            transition: "padding-right 0.25s ease",
-          }}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/history" element={<History />} />
-              <Route path="/incidents" element={<Incidents />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/team" element={<Team />} />
-            </Routes>
-          </main>
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "240px 1fr",
+      height: "100vh",
+      overflow: "hidden",
+      background: "var(--bg)",
+      color: "var(--t1)",
+      fontFamily: "var(--f)",
+    }}>
+      <Sidebar />
+      <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        <TopBar onDeclareIncident={() => navigate("/incidents")} />
+        <main style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "22px",
+          paddingRight: copilotOpen ? "365px" : "22px",
+          background: "var(--bg)",
+          transition: "padding-right 0.25s ease",
+        }}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/incidents" element={<Incidents />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/team" element={<Team />} />
+          </Routes>
+        </main>
 
-          {/* Tab toggle */}
-          <div
-            onClick={() => setCopilotOpen(o => !o)}
+        {/* Copilot Drawer */}
+        <CopilotDrawer open={copilotOpen} />
+
+        {/* Copilot FAB */}
+        {!copilotOpen && (
+          <button
+            onClick={() => setCopilotOpen(true)}
             style={{
               position: "fixed",
-              right: copilotOpen ? 320 : 0,
-              top: "50%",
-              transform: "translateY(-50%)",
-              zIndex: 60,
+              bottom: 22,
+              right: 22,
+              width: 48,
+              height: 48,
+              borderRadius: 14,
+              background: "linear-gradient(135deg, var(--brand), #6366F1)",
+              border: "none",
+              color: "#fff",
               cursor: "pointer",
-              transition: "right 0.25s ease",
-            }}
-          >
-            <div style={{
-              background: "var(--s1)",
-              border: "1px solid var(--b2)",
-              borderRight: "none",
-              borderRadius: "6px 0 0 6px",
-              padding: "12px 6px",
               display: "flex",
-              flexDirection: "column",
               alignItems: "center",
-              gap: 8,
-              boxShadow: "-3px 0 12px rgba(0,0,0,0.3)",
-            }}>
-              <div style={{
-                width: 6, height: 6, borderRadius: "50%",
-                background: "var(--bl)",
-                boxShadow: "0 0 6px var(--bl)",
-              }} />
-              <span style={{
-                fontFamily: "var(--fm)",
-                fontSize: 8,
-                color: "var(--bl)",
-                textTransform: "uppercase",
-                letterSpacing: "0.14em",
-                writingMode: "vertical-rl",
-                userSelect: "none",
-              }}>
-                Copilot
-              </span>
-              <span style={{
-                fontFamily: "var(--fm)",
-                fontSize: 10,
-                color: "var(--t3)",
-                transform: copilotOpen ? "rotate(90deg)" : "rotate(-90deg)",
-                transition: "transform 0.2s",
-              }}>
-                ›
-              </span>
-            </div>
-          </div>
+              justifyContent: "center",
+              boxShadow: "0 4px 20px rgba(59,130,246,0.4)",
+              transition: "all 0.2s",
+              zIndex: 60,
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1.08)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 6px 28px rgba(59,130,246,0.5)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(59,130,246,0.4)"; }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/>
+            </svg>
+          </button>
+        )}
 
-          <CopilotDrawer open={copilotOpen} />
-        </div>
+        {/* Copilot close zone — click outside to close */}
+        {copilotOpen && (
+          <div
+            onClick={() => setCopilotOpen(false)}
+            style={{
+              position: "fixed",
+              bottom: 22,
+              right: 355,
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: "var(--s2)",
+              border: "1px solid var(--b2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              zIndex: 60,
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--b3)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--b2)"; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--t2)" strokeWidth="2" strokeLinecap="round">
+              <line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/>
+            </svg>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppLayout />
     </BrowserRouter>
   );
 }

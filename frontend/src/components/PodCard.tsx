@@ -1,208 +1,241 @@
-// Carte individuelle d'un pod — affiche statut, diagnostic, events, logs et actions de remédiation
 import { useState } from "react";
 import axios from "axios";
-import type { Pod } from "../types";
-import {
-  CheckCircle,
-  AlertTriangle,
-  RefreshCw,
-  ChevronDown,
-  ChevronUp,
-  Terminal,
-  Zap,
-  Loader2,
-  Clock,
-} from "lucide-react";
 import API_URL from "../config";
 
-interface PodCardProps {
-  pod: Pod;
-  onRemediationRequest: (podName: string) => void;
+interface Pod {
+  pod_name: string;
+  health_status: "HEALTHY" | "UNHEALTHY";
+  restarts: number;
+  diagnostic: string;
+  internal_phase: string;
 }
 
-export default function PodCard({ pod, onRemediationRequest }: PodCardProps) {
+export default function PodCard({ pod, onRemediate }: { pod: Pod; onRemediate?: (pod: Pod) => void }) {
   const [expanded, setExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"events" | "logs">("events");
+  const [tab, setTab] = useState<"events" | "logs">("events");
   const [events, setEvents] = useState<any[]>([]);
   const [logs, setLogs] = useState<string>("");
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
-  const isHealthy = pod.health_status === "HEALTHY";
-
-  const handleExpand = async () => {
-    const next = !expanded;
-    setExpanded(next);
-    if (next && events.length === 0) {
-      fetchEvents();
-    }
-  };
+  const h = pod.health_status === "HEALTHY";
 
   const fetchEvents = async () => {
     setLoadingEvents(true);
     try {
       const res = await axios.get(`${API_URL}/pods/${pod.pod_name}/events`);
-      setEvents(res.data.events);
-    } catch (e) {
-      setEvents([]);
-    } finally {
-      setLoadingEvents(false);
-    }
+      setEvents(res.data.events || []);
+    } catch (e) { console.error(e); }
+    finally { setLoadingEvents(false); }
   };
 
   const fetchLogs = async () => {
-    if (logs) return;
     setLoadingLogs(true);
     try {
       const res = await axios.get(`${API_URL}/pods/${pod.pod_name}/logs`);
-      setLogs(res.data.logs);
-    } catch (e) {
-      setLogs("Impossible de récupérer les logs.");
-    } finally {
-      setLoadingLogs(false);
-    }
+      setLogs(res.data.logs || "");
+    } catch (e) { console.error(e); }
+    finally { setLoadingLogs(false); }
   };
 
-  const handleTabChange = (tab: "events" | "logs") => {
-    setActiveTab(tab);
-    if (tab === "logs") fetchLogs();
+  const toggle = () => {
+    if (!expanded) {
+      fetchEvents();
+      fetchLogs();
+    }
+    setExpanded(!expanded);
   };
 
   return (
-    <div className={`bg-zinc-900 border rounded-lg overflow-hidden transition-all ${
-      isHealthy ? "border-zinc-800" : "border-orange-500/40"
-    }`}>
+    <div style={{
+      background: "var(--s1)",
+      border: h ? "1px solid var(--b1)" : "1px solid rgba(248,113,113,0.25)",
+      borderRadius: "var(--r)",
+      overflow: "hidden",
+      transition: "border-color 0.15s",
+    }}>
+      {/* Top accent */}
+      <div style={{
+        height: 2,
+        background: h ? "var(--g)" : "var(--re)",
+        opacity: h ? 0.4 : 0.7,
+      }} />
 
-      {/* Header carte */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-3">
-          {isHealthy ? (
-            <CheckCircle size={16} className="text-green-500 shrink-0" />
-          ) : (
-            <AlertTriangle size={16} className="text-orange-500 shrink-0 animate-pulse" />
-          )}
-          <span className="text-sm font-mono font-bold text-zinc-100 truncate">
+      {/* Header row */}
+      <div
+        onClick={toggle}
+        style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "12px 16px",
+          cursor: "pointer",
+          transition: "background 0.1s",
+        }}
+        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--s2)"}
+        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+      >
+        {/* Status dot */}
+        <div style={{
+          width: 7, height: 7, borderRadius: "50%",
+          background: h ? "var(--g)" : "var(--re)",
+          boxShadow: h ? "none" : "0 0 6px var(--re)60",
+          animation: h ? "none" : "pulse 2s infinite",
+          flexShrink: 0,
+        }} />
+
+        {/* Name + phase */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: "var(--fm)", fontSize: 12, fontWeight: 600, color: "var(--t1)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>
             {pod.pod_name}
-          </span>
+          </div>
+          <div style={{
+            fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", marginTop: 2,
+          }}>
+            {pod.internal_phase}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {pod.restarts > 0 && (
-            <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
-              <RefreshCw size={10} />
-              {pod.restarts} restarts
-            </span>
-          )}
-          <span className={`text-xs font-mono px-2 py-0.5 rounded border ${
-            isHealthy
-              ? "bg-green-500/10 text-green-400 border-green-500/20"
-              : "bg-orange-500/10 text-orange-400 border-orange-500/20"
-          }`}>
-            {pod.internal_phase}
+        {/* Health badge */}
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 4,
+          padding: "3px 8px", borderRadius: 5,
+          fontFamily: "var(--fm)", fontSize: 10, fontWeight: 600,
+          letterSpacing: "0.04em", textTransform: "uppercase",
+          color: h ? "var(--g)" : "var(--re)",
+          background: h ? "var(--g-a)" : "var(--re-a)",
+        }}>
+          {h ? "healthy" : "unhealthy"}
+        </span>
+
+        {/* Restarts */}
+        {pod.restarts > 0 && (
+          <span style={{
+            fontFamily: "var(--fm)", fontSize: 9, color: "var(--re)",
+            background: "var(--re-a)", padding: "2px 6px", borderRadius: 4,
+            border: "1px solid rgba(248,113,113,0.2)", fontWeight: 600,
+          }}>
+            {pod.restarts}× restart
           </span>
-          <button
-            onClick={handleExpand}
-            className="p-1 rounded text-zinc-600 hover:text-zinc-300 transition-all"
-          >
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-        </div>
+        )}
+
+        {/* Chevron */}
+        <svg
+          width="12" height="12" viewBox="0 0 16 16"
+          fill="none" stroke="var(--t3)" strokeWidth="2" strokeLinecap="round"
+          style={{ transition: "transform 0.15s", transform: expanded ? "rotate(180deg)" : "rotate(0deg)", flexShrink: 0 }}
+        >
+          <path d="M4 6l4 4 4-4"/>
+        </svg>
       </div>
 
-      {/* Contenu expandable */}
+      {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-zinc-800">
+        <div style={{ borderTop: "1px solid var(--b1)" }}>
+          {/* Diagnostic */}
+          {pod.diagnostic && (
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--b1)" }}>
+              <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontWeight: 600 }}>
+                Diagnostic
+              </div>
+              <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t2)", lineHeight: 1.6 }}>
+                {pod.diagnostic}
+              </p>
+            </div>
+          )}
 
           {/* Tabs */}
-          <div className="flex border-b border-zinc-800">
-            <button
-              onClick={() => handleTabChange("events")}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-mono transition-all ${
-                activeTab === "events"
-                  ? "text-orange-400 border-b-2 border-orange-500 bg-orange-500/5"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              <Clock size={11} />
-              Events
-            </button>
-            <button
-              onClick={() => handleTabChange("logs")}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-mono transition-all ${
-                activeTab === "logs"
-                  ? "text-orange-400 border-b-2 border-orange-500 bg-orange-500/5"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              <Terminal size={11} />
-              Logs
-            </button>
+          <div style={{ display: "flex", borderBottom: "1px solid var(--b1)" }}>
+            {(["events", "logs"] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                flex: 1, padding: "8px", border: "none", cursor: "pointer",
+                fontFamily: "var(--fm)", fontSize: 11, fontWeight: tab === t ? 600 : 400,
+                color: tab === t ? "var(--brand2)" : "var(--t3)",
+                background: tab === t ? "var(--brand-a)" : "transparent",
+                borderBottom: tab === t ? "2px solid var(--brand)" : "2px solid transparent",
+                transition: "all 0.12s",
+                textTransform: "capitalize",
+              }}>
+                {t}
+              </button>
+            ))}
           </div>
 
-          {/* Contenu tab */}
-          <div className="p-4">
-
-            {/* Tab Events */}
-            {activeTab === "events" && (
-              <div className="space-y-2">
-                {loadingEvents ? (
-                  <div className="flex items-center gap-2 text-zinc-600 text-xs font-mono">
-                    <Loader2 size={12} className="animate-spin" />
-                    Chargement des events...
-                  </div>
-                ) : events.length === 0 ? (
-                  <p className="text-xs text-zinc-600 font-mono">Aucun event trouvé.</p>
-                ) : (
-                  events.map((e, i) => (
-                    <div key={i} className={`flex items-start gap-3 p-2.5 rounded border text-xs font-mono ${
-                      e.type === "Warning"
-                        ? "bg-orange-500/5 border-orange-500/20 text-orange-300"
-                        : "bg-zinc-800/50 border-zinc-700 text-zinc-400"
-                    }`}>
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-bold ${e.type === "Warning" ? "text-orange-400" : "text-zinc-300"}`}>
-                            {e.reason}
-                          </span>
-                          <span className="text-zinc-600">×{e.count}</span>
-                        </div>
-                        <span className="text-zinc-500 break-words">{e.message}</span>
-                      </div>
+          {/* Tab content */}
+          <div style={{ padding: "12px 16px", maxHeight: 240, overflowY: "auto" }}>
+            {tab === "events" ? (
+              loadingEvents ? (
+                <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Chargement...</p>
+              ) : events.length === 0 ? (
+                <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Aucun événement</p>
+              ) : (
+                events.map((ev, i) => (
+                  <div key={i} style={{
+                    padding: "8px 0",
+                    borderBottom: i < events.length - 1 ? "1px solid var(--b1)" : "none",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{
+                        fontFamily: "var(--fm)", fontSize: 10, fontWeight: 600,
+                        color: ev.type === "Warning" ? "var(--am)" : "var(--t2)",
+                      }}>
+                        {ev.type || "Event"}
+                      </span>
+                      <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)" }}>
+                        {ev.reason}
+                      </span>
                     </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* Tab Logs */}
-            {activeTab === "logs" && (
-              <div>
-                {loadingLogs ? (
-                  <div className="flex items-center gap-2 text-zinc-600 text-xs font-mono">
-                    <Loader2 size={12} className="animate-spin" />
-                    Chargement des logs...
+                    <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t2)", marginTop: 3, lineHeight: 1.5 }}>
+                      {ev.message}
+                    </p>
                   </div>
-                ) : (
-                  <pre className="text-xs text-zinc-300 font-mono leading-relaxed whitespace-pre-wrap break-words bg-zinc-950 rounded p-3 border border-zinc-800">
-                    {logs || "Aucun log disponible."}
-                  </pre>
-                )}
-              </div>
-            )}
-
-            {/* Bouton remédiation — seulement si pod en erreur */}
-            {!isHealthy && (
-              <div className="mt-4 pt-3 border-t border-zinc-800">
-                <button
-                  onClick={() => onRemediationRequest(pod.pod_name)}
-                  className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 hover:text-orange-300 rounded text-xs font-mono font-bold transition-all"
-                >
-                  <Zap size={12} />
-                  Demander une remédiation IA
-                </button>
-              </div>
+                ))
+              )
+            ) : (
+              loadingLogs ? (
+                <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Chargement...</p>
+              ) : !logs ? (
+                <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Aucun log</p>
+              ) : (
+                <pre style={{
+                  fontFamily: "var(--fm)", fontSize: 10, color: "var(--t2)",
+                  lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-all",
+                  margin: 0,
+                }}>
+                  {logs}
+                </pre>
+              )
             )}
           </div>
+
+          {/* Remediate button for unhealthy pods */}
+          {!h && onRemediate && (
+            <div style={{ padding: "10px 16px", borderTop: "1px solid var(--b1)" }}>
+              <button
+                onClick={() => onRemediate(pod)}
+                style={{
+                  width: "100%",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  padding: "9px",
+                  borderRadius: "var(--r)",
+                  fontFamily: "var(--f)", fontSize: 12, fontWeight: 600,
+                  cursor: "pointer", border: "none",
+                  background: "var(--re)",
+                  color: "#fff",
+                  boxShadow: "0 2px 8px rgba(248,113,113,0.25)",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 14px rgba(248,113,113,0.35)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(248,113,113,0.25)"; }}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M8 2L14 13H2L8 2z"/><path d="M8 7v2.5M8 11.5v.5"/>
+                </svg>
+                Analyser et remédier
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

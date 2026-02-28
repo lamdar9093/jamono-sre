@@ -32,7 +32,7 @@ function timeAgo(d: string) {
 }
 
 const ACTION_COLOR: Record<string, string> = {
-  created:  "var(--jam2)",
+  created:  "var(--brand)",
   status:   "var(--bl)",
   resolved: "var(--g)",
   assigned: "var(--am)",
@@ -59,7 +59,6 @@ export default function History() {
     setLoading(true);
     try {
       const res = await axios.get(`${API_URL}/audit`);
-      // Support both formats
       const data = res.data.entries ?? res.data.logs ?? [];
       setEntries(data);
     } catch (e) { console.error(e); }
@@ -79,72 +78,87 @@ export default function History() {
     );
   });
 
-  // Detect which format the data is in
   const hasRemediationData = entries.some(e => e.pod_name || e.action_type);
 
   const stats = [
     { label: "Total", val: entries.length, color: "var(--t1)" },
     { label: "Succès", val: entries.filter(e => e.status === "success").length, color: "var(--g)" },
     { label: "Échecs", val: entries.filter(e => e.status === "failed").length, color: "var(--re)" },
-    { label: "Incidents", val: entries.filter(e => e.incident_id).length, color: "var(--jam2)" },
+    { label: "Incidents", val: entries.filter(e => e.incident_id).length, color: "var(--brand)" },
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
-          <h1 style={{ fontSize: 17, fontWeight: 600, color: "var(--t1)", letterSpacing: "-0.02em" }}>Historique</h1>
-          <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", marginTop: 2 }}>
-            // {entries.length} événements enregistrés
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--t1)", letterSpacing: "-0.02em" }}>Historique</h1>
+          <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", marginTop: 3 }}>
+            {entries.length} événements enregistrés
           </p>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 8 }}>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Rechercher..."
             style={{
               background: "var(--s2)", border: "1px solid var(--b2)",
-              borderRadius: "var(--r)", padding: "5px 10px",
+              borderRadius: "var(--r)", padding: "6px 12px",
               fontFamily: "var(--fm)", fontSize: 11,
-              color: "var(--t1)", outline: "none", width: 180,
+              color: "var(--t1)", outline: "none", width: 200,
+              transition: "border-color 0.15s",
             }}
+            onFocus={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--brand-b)"}
+            onBlur={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--b2)"}
           />
           <button onClick={fetchLogs} style={{
-            padding: "5px 12px", borderRadius: 5,
+            padding: "6px 14px", borderRadius: "var(--r)",
             fontFamily: "var(--f)", fontSize: 12, fontWeight: 500,
             cursor: "pointer", border: "1px solid var(--b2)",
             background: "transparent", color: "var(--t2)",
-          }}>↻</button>
+            transition: "all 0.12s",
+          }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--s2)"; (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
+          >↻</button>
         </div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
         {stats.map(s => (
-          <div key={s.label} style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", padding: "12px 14px" }}>
-            <div style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>{s.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.03em", color: s.color }}>{s.val}</div>
+          <div key={s.label} style={{
+            background: "var(--s1)", border: "1px solid var(--b1)",
+            borderRadius: "var(--r)", padding: "16px 18px",
+            position: "relative", overflow: "hidden",
+          }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = `${s.color}35`}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--b1)"}
+          >
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${s.color}, transparent)`, opacity: 0.5 }} />
+            <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, fontWeight: 600 }}>{s.label}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.03em", color: s.color, fontFamily: "var(--fm)" }}>{s.val}</div>
           </div>
         ))}
       </div>
 
-      {/* View toggle si données remédiation disponibles */}
+      {/* View toggle */}
       {hasRemediationData && (
-        <div style={{ display: "flex", gap: 1, background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", padding: 4, width: "fit-content" }}>
+        <div style={{ display: "flex", gap: 2, background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", padding: 4, width: "fit-content" }}>
           {[
             { key: "incidents", label: "Audit incidents" },
             { key: "remediation", label: "Remédiations" },
           ].map(t => (
             <button key={t.key} onClick={() => setView(t.key as any)} style={{
-              padding: "4px 12px", borderRadius: 4,
-              fontFamily: "var(--fm)", fontSize: 10, cursor: "pointer",
+              padding: "5px 14px", borderRadius: 6,
+              fontFamily: "var(--fm)", fontSize: 11, cursor: "pointer",
               border: "none",
               background: view === t.key ? "var(--s2)" : "transparent",
               color: view === t.key ? "var(--t1)" : "var(--t3)",
-              transition: "all 0.1s",
+              fontWeight: view === t.key ? 600 : 400,
+              transition: "all 0.12s",
             }}>{t.label}</button>
           ))}
         </div>
@@ -153,26 +167,26 @@ export default function History() {
       {/* Timeline — incidents view */}
       {view === "incidents" && (
         <div style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 14px", borderBottom: "1px solid var(--b1)" }}>
-            <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--bl)" }} />
-            <span style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderBottom: "1px solid var(--b1)" }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--bl)" }} />
+            <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
               Audit log
             </span>
-            <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", background: "var(--s2)", border: "1px solid var(--b2)", padding: "1px 5px", borderRadius: 3 }}>
+            <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", background: "var(--s2)", border: "1px solid var(--b2)", padding: "2px 6px", borderRadius: 4 }}>
               {filtered.length}
             </span>
           </div>
 
           {loading ? (
-            <div style={{ padding: "32px 14px", textAlign: "center" }}>
+            <div style={{ padding: "40px 16px", textAlign: "center" }}>
               <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Chargement...</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: "32px 14px", textAlign: "center" }}>
+            <div style={{ padding: "40px 16px", textAlign: "center" }}>
               <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>Aucun événement</p>
             </div>
           ) : (
-            <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column" }}>
               {filtered.map((entry, i) => (
                 <div key={entry.id} style={{ display: "flex", gap: 12 }}>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 20, flexShrink: 0 }}>
@@ -188,19 +202,19 @@ export default function History() {
                   <div style={{ paddingBottom: 16, flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{
-                        fontFamily: "var(--fm)", fontSize: 10, fontWeight: 500,
+                        fontFamily: "var(--fm)", fontSize: 10.5, fontWeight: 600,
                         color: ACTION_COLOR[entry.action] || "var(--t2)",
-                        textTransform: "uppercase", letterSpacing: "0.06em",
+                        textTransform: "uppercase", letterSpacing: "0.05em",
                       }}>
                         {entry.action || entry.action_type}
                       </span>
                       {entry.incident_id && (
-                        <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", background: "var(--s2)", border: "1px solid var(--b2)", padding: "1px 5px", borderRadius: 3 }}>
+                        <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", background: "var(--s2)", border: "1px solid var(--b2)", padding: "2px 6px", borderRadius: 4 }}>
                           #{entry.incident_id}
                         </span>
                       )}
                       {entry.pod_name && (
-                        <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t2)" }}>
+                        <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t2)" }}>
                           {entry.pod_name}
                         </span>
                       )}
@@ -212,22 +226,22 @@ export default function History() {
                       </span>
                     </div>
                     {(entry.detail || (entry.change_before && entry.change_after)) && (
-                      <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t2)", marginTop: 3, lineHeight: 1.5 }}>
+                      <p style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--t2)", marginTop: 4, lineHeight: 1.5 }}>
                         {entry.detail || `${entry.change_before} → ${entry.change_after}`}
                       </p>
                     )}
                     {entry.status && (
                       <span style={{
                         display: "inline-flex", alignItems: "center", gap: 4,
-                        marginTop: 4, padding: "1px 6px", borderRadius: 3,
-                        fontFamily: "var(--fm)", fontSize: 9,
+                        marginTop: 5, padding: "2px 7px", borderRadius: 4,
+                        fontFamily: "var(--fm)", fontSize: 9.5,
                         color: STATUS_COLOR[entry.status]?.color || "var(--t3)",
                         background: STATUS_COLOR[entry.status]?.bg || "var(--s2)",
                       }}>
                         {STATUS_COLOR[entry.status]?.label || entry.status}
                       </span>
                     )}
-                    <p style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginTop: 2 }}>
+                    <p style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginTop: 3 }}>
                       {fmtDate(entry.timestamp)}
                     </p>
                   </div>
@@ -241,27 +255,26 @@ export default function History() {
       {/* Table — remediation view */}
       {view === "remediation" && (
         <div style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 14px", borderBottom: "1px solid var(--b1)" }}>
-            <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--jam2)" }} />
-            <span style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderBottom: "1px solid var(--b1)" }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }} />
+            <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
               Actions de remédiation
             </span>
           </div>
 
-          {/* Col headers */}
-          <div style={{ display: "grid", gridTemplateColumns: "36px 140px 1fr 120px 160px 80px 90px", padding: "6px 14px", gap: 10, borderBottom: "1px solid var(--b1)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "36px 140px 1fr 120px 160px 80px 90px", padding: "8px 16px", gap: 10, borderBottom: "1px solid var(--b1)" }}>
             {["#","Date","Pod","Action","Changement","Par","Statut"].map(h => (
-              <span key={h} style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{h}</span>
+              <span key={h} style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>{h}</span>
             ))}
           </div>
 
           {filtered.map(entry => {
-            const st = STATUS_COLOR[entry.status || ""] ;
+            const st = STATUS_COLOR[entry.status || ""];
             return (
               <div key={entry.id} style={{
                 display: "grid", gridTemplateColumns: "36px 140px 1fr 120px 160px 80px 90px",
-                padding: "8px 14px", gap: 10, borderBottom: "1px solid var(--b1)",
-                alignItems: "center", transition: "background 0.08s",
+                padding: "9px 16px", gap: 10, borderBottom: "1px solid var(--b1)",
+                alignItems: "center", transition: "background 0.1s",
               }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--s2)"}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
@@ -271,7 +284,7 @@ export default function History() {
                 <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t1)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {entry.pod_name || "—"}
                 </span>
-                <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--jam2)" }}>{entry.action_type || entry.action}</span>
+                <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--brand)" }}>{entry.action_type || entry.action}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: "var(--fm)", fontSize: 10, overflow: "hidden" }}>
                   <span style={{ color: "var(--re)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.change_before || "—"}</span>
                   <span style={{ color: "var(--t3)", flexShrink: 0 }}>→</span>
@@ -279,7 +292,7 @@ export default function History() {
                 </div>
                 <span style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>{entry.approved_by || entry.author || "—"}</span>
                 {st ? (
-                  <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 6px", borderRadius: 3, fontFamily: "var(--fm)", fontSize: 9, color: st.color, background: st.bg }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 7px", borderRadius: 4, fontFamily: "var(--fm)", fontSize: 9.5, color: st.color, background: st.bg }}>
                     {st.label}
                   </span>
                 ) : (

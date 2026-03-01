@@ -40,7 +40,10 @@ jobs:
             
             # Créer le .env depuis les secrets
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
+            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+            echo "LLM_PROVIDER=${LLM_PROVIDER:-openai}" >> .env
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > backend/.env
+            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> backend/.env
             
             # Build et restart
             docker compose -f docker-compose.prod.yml build --no-cache

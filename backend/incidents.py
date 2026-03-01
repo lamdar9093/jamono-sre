@@ -1,47 +1,10 @@
-# Système de gestion des incidents — modèle de données, CRUD et cycle de vie complet
-import os
-import sqlite3
-import json
-from datetime import datetime
+# Système de gestion des incidents — SQLAlchemy PostgreSQL
+from datetime import datetime, timedelta
+from sqlalchemy import func, and_
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from models import Incident, TimelineEntry
 
-DB_PATH = "data/incidents.db"
-
-def init_incidents_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS incidents (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            description TEXT,
-            severity TEXT DEFAULT 'medium',
-            status TEXT DEFAULT 'open',
-            source TEXT DEFAULT 'manual',
-            environment TEXT DEFAULT 'prod',
-            linked_pod TEXT,
-            assigned_to TEXT,
-            created_by TEXT DEFAULT 'admin',
-            slack_channel TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            resolved_at TEXT,
-            watch_until TEXT,
-            mttr_seconds INTEGER
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS incident_timeline (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            incident_id INTEGER NOT NULL,
-            timestamp TEXT NOT NULL,
-            author TEXT DEFAULT 'admin',
-            action TEXT NOT NULL,
-            detail TEXT,
-            FOREIGN KEY (incident_id) REFERENCES incidents(id)
-        )
-    """)
-    conn.commit()
-    conn.close()
 
 def create_incident(
     title: str,
@@ -52,191 +15,186 @@ def create_incident(
     linked_pod: str = None,
     assigned_to: str = None,
     created_by: str = "admin",
-    watch_minutes: int = None
+    watch_minutes: int = None,
 ) -> dict:
-    now = datetime.now().isoformat()
-    watch_until = None
-    status = "open"
+    db = SessionLocal()
+    try:
+        now = datetime.now()
+        status = "open"
+        watch_until = None
 
-    if source == "watch" and watch_minutes:
-        from datetime import timedelta
-        watch_until = (datetime.now() + timedelta(minutes=watch_minutes)).isoformat()
-        status = "watching"
+        if source == "watch" and watch_minutes:
+            watch_until = now + timedelta(minutes=watch_minutes)
+            status = "watching"
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.execute("""
-        INSERT INTO incidents 
-        (title, description, severity, status, source, environment, linked_pod, assigned_to, created_by, created_at, updated_at, watch_until)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (title, description, severity, status, source, environment, linked_pod, assigned_to, created_by, now, now, watch_until))
-    
-    incident_id = cursor.lastrowid
-    
-    # Timeline : entrée initiale
-    conn.execute("""
-        INSERT INTO incident_timeline (incident_id, timestamp, author, action, detail)
-        VALUES (?, ?, ?, ?, ?)
-    """, (incident_id, now, created_by, "created", f"Incident créé via {source}"))
-    
-    conn.commit()
-    conn.close()
-    
-    return get_incident(incident_id)
+        incident = Incident(
+            title=title,
+            description=description,
+            severity=severity,
+            status=status,
+            source=source,
+            environment=environment,
+            linked_pod=linked_pod,
+            assigned_to=assigned_to,
+            created_by=created_by,
+            created_at=now,
+            updated_at=now,
+            watch_until=watch_until,
+        )
+        db.add(incident)
+        db.flush()
 
-def get_incident(incident_id: int) -> dict:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,))
-    row = cursor.fetchone()
-    conn.close()
-    if not row:
-        return None
-    return _row_to_dict(row)
+        entry = TimelineEntry(
+            incident_id=incident.id,
+            timestamp=now,
+            author=created_by,
+            action="created",
+            detail=f"Incident créé via {source}",
+        )
+        db.add(entry)
+        db.commit()
+        db.refresh(incident)
+        return incident.to_dict()
+    finally:
+        db.close()
+
+
+def get_incident(incident_id: int) -> dict | None:
+    db = SessionLocal()
+    try:
+        inc = db.query(Incident).filter(Incident.id == incident_id).first()
+        return inc.to_dict() if inc else None
+    finally:
+        db.close()
+
 
 def list_incidents(status: str = None, environment: str = None) -> list:
-    conn = sqlite3.connect(DB_PATH)
-    query = "SELECT * FROM incidents"
-    params = []
-    conditions = []
-    
-    if status:
-        conditions.append("status = ?")
-        params.append(status)
-    if environment:
-        conditions.append("environment = ?")
-        params.append(environment)
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    
-    query += " ORDER BY created_at DESC"
-    cursor = conn.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-    return [_row_to_dict(r) for r in rows]
+    db = SessionLocal()
+    try:
+        q = db.query(Incident)
+        if status:
+            q = q.filter(Incident.status == status)
+        if environment:
+            q = q.filter(Incident.environment == environment)
+        q = q.order_by(Incident.created_at.desc())
+        return [i.to_dict() for i in q.all()]
+    finally:
+        db.close()
+
 
 def update_incident_status(incident_id: int, new_status: str, author: str = "admin", detail: str = None) -> dict:
-    now = datetime.now().isoformat()
-    conn = sqlite3.connect(DB_PATH)
-    
-    resolved_at = now if new_status == "resolved" else None
-    
-    # Calcul MTTR si résolution
-    mttr = None
-    if new_status == "resolved":
-        cursor = conn.execute("SELECT created_at FROM incidents WHERE id = ?", (incident_id,))
-        row = cursor.fetchone()
-        if row:
-            created = datetime.fromisoformat(row[0])
-            mttr = int((datetime.now() - created).total_seconds())
-    
-    conn.execute("""
-        UPDATE incidents 
-        SET status = ?, updated_at = ?, resolved_at = ?, mttr_seconds = ?
-        WHERE id = ?
-    """, (new_status, now, resolved_at, mttr, incident_id))
-    
-    conn.execute("""
-        INSERT INTO incident_timeline (incident_id, timestamp, author, action, detail)
-        VALUES (?, ?, ?, ?, ?)
-    """, (incident_id, now, author, f"status_changed_to_{new_status}", detail or f"Statut changé → {new_status}"))
-    
-    conn.commit()
-    conn.close()
-    return get_incident(incident_id)
+    db = SessionLocal()
+    try:
+        inc = db.query(Incident).filter(Incident.id == incident_id).first()
+        if not inc:
+            return None
+
+        now = datetime.now()
+        inc.status = new_status
+        inc.updated_at = now
+
+        if new_status == "resolved":
+            inc.resolved_at = now
+            if inc.created_at:
+                inc.mttr_seconds = int((now - inc.created_at).total_seconds())
+
+        entry = TimelineEntry(
+            incident_id=incident_id,
+            timestamp=now,
+            author=author,
+            action=f"status_changed_to_{new_status}",
+            detail=detail or f"Statut changé → {new_status}",
+        )
+        db.add(entry)
+        db.commit()
+        db.refresh(inc)
+        return inc.to_dict()
+    finally:
+        db.close()
+
 
 def add_timeline_entry(incident_id: int, action: str, detail: str, author: str = "admin"):
-    now = datetime.now().isoformat()
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        INSERT INTO incident_timeline (incident_id, timestamp, author, action, detail)
-        VALUES (?, ?, ?, ?, ?)
-    """, (incident_id, now, author, action, detail))
-    conn.execute("UPDATE incidents SET updated_at = ? WHERE id = ?", (now, incident_id))
-    conn.commit()
-    conn.close()
+    db = SessionLocal()
+    try:
+        now = datetime.now()
+        entry = TimelineEntry(
+            incident_id=incident_id,
+            timestamp=now,
+            author=author,
+            action=action,
+            detail=detail,
+        )
+        db.add(entry)
+        db.query(Incident).filter(Incident.id == incident_id).update({"updated_at": now})
+        db.commit()
+    finally:
+        db.close()
+
 
 def get_timeline(incident_id: int) -> list:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.execute("""
-        SELECT * FROM incident_timeline 
-        WHERE incident_id = ? 
-        ORDER BY timestamp ASC
-    """, (incident_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    return [
-        {
-            "id": r[0],
-            "incident_id": r[1],
-            "timestamp": r[2],
-            "author": r[3],
-            "action": r[4],
-            "detail": r[5]
-        }
-        for r in rows
-    ]
+    db = SessionLocal()
+    try:
+        entries = (
+            db.query(TimelineEntry)
+            .filter(TimelineEntry.incident_id == incident_id)
+            .order_by(TimelineEntry.timestamp.asc())
+            .all()
+        )
+        return [e.to_dict() for e in entries]
+    finally:
+        db.close()
 
-def check_watch_incidents():
-    """Vérifie les incidents en mode watch — les convertit en open si le timer est expiré"""
-    now = datetime.now().isoformat()
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.execute("""
-        SELECT id FROM incidents 
-        WHERE status = 'watching' AND watch_until <= ?
-    """, (now,))
-    expired = cursor.fetchall()
-    conn.close()
-    
-    for (incident_id,) in expired:
-        update_incident_status(incident_id, "open", author="system", detail="Timer de surveillance expiré — incident ouvert automatiquement")
-    
-    return len(expired)
+
+def check_watch_incidents() -> int:
+    """Convertit les incidents watching expirés en open."""
+    db = SessionLocal()
+    try:
+        now = datetime.now()
+        expired = (
+            db.query(Incident)
+            .filter(and_(Incident.status == "watching", Incident.watch_until <= now))
+            .all()
+        )
+        for inc in expired:
+            inc.status = "open"
+            inc.updated_at = now
+            entry = TimelineEntry(
+                incident_id=inc.id,
+                timestamp=now,
+                author="system",
+                action="status_changed_to_open",
+                detail="Timer de surveillance expiré — incident ouvert automatiquement",
+            )
+            db.add(entry)
+        db.commit()
+        return len(expired)
+    finally:
+        db.close()
+
 
 def get_mttr_stats() -> dict:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.execute("""
-        SELECT 
-            COUNT(*) as total,
-            SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
-            AVG(CASE WHEN mttr_seconds IS NOT NULL THEN mttr_seconds END) as avg_mttr,
-            MIN(mttr_seconds) as min_mttr,
-            MAX(mttr_seconds) as max_mttr
-        FROM incidents
-    """)
-    row = cursor.fetchone()
-    conn.close()
-    return {
-        "total": row[0],
-        "resolved": row[1],
-        "avg_mttr_seconds": int(row[2]) if row[2] else 0,
-        "min_mttr_seconds": row[3] or 0,
-        "max_mttr_seconds": row[4] or 0
-    }
+    db = SessionLocal()
+    try:
+        total = db.query(func.count(Incident.id)).scalar() or 0
+        resolved = db.query(func.count(Incident.id)).filter(Incident.status == "resolved").scalar() or 0
+        avg_mttr = db.query(func.avg(Incident.mttr_seconds)).filter(Incident.mttr_seconds.isnot(None)).scalar()
+        min_mttr = db.query(func.min(Incident.mttr_seconds)).filter(Incident.mttr_seconds.isnot(None)).scalar()
+        max_mttr = db.query(func.max(Incident.mttr_seconds)).filter(Incident.mttr_seconds.isnot(None)).scalar()
+        return {
+            "total": total,
+            "resolved": resolved,
+            "avg_mttr_seconds": int(avg_mttr) if avg_mttr else 0,
+            "min_mttr_seconds": min_mttr or 0,
+            "max_mttr_seconds": max_mttr or 0,
+        }
+    finally:
+        db.close()
 
-def _row_to_dict(row) -> dict:
-    return {
-        "id": row[0],
-        "title": row[1],
-        "description": row[2],
-        "severity": row[3],
-        "status": row[4],
-        "source": row[5],
-        "environment": row[6],
-        "linked_pod": row[7],
-        "assigned_to": row[8],
-        "created_by": row[9],
-        "slack_channel": row[10],
-        "created_at": row[11],
-        "updated_at": row[12],
-        "resolved_at": row[13],
-        "watch_until": row[14],
-        "mttr_seconds": row[15]
-    }
-
-# Init au démarrage
-init_incidents_db()
 
 def update_slack_channel(incident_id: int, channel_id: str):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("UPDATE incidents SET slack_channel = ? WHERE id = ?", (channel_id, incident_id))
-    conn.commit()
-    conn.close()
+    db = SessionLocal()
+    try:
+        db.query(Incident).filter(Incident.id == incident_id).update({"slack_channel": channel_id})
+        db.commit()
+    finally:
+        db.close()

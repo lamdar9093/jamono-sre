@@ -10,40 +10,41 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from main import run_sre_system
-from audit import init_audit_db, log_action, update_action_status, get_audit_log, get_rollback_snapshot
+from database import engine, Base
+from models import *  # noqa — register all models
+from audit import log_action, update_action_status, get_audit_log, get_rollback_snapshot
 from incidents import (
-    init_incidents_db, create_incident, get_incident,
-    list_incidents, update_incident_status, add_timeline_entry,
+    create_incident, get_incident, list_incidents,
+    update_incident_status, add_timeline_entry,
     get_timeline, check_watch_incidents, get_mttr_stats, update_slack_channel
 )
-from settings import init_settings_db, get_all_settings, get_setting, update_settings
+from settings import get_all_settings, get_setting, update_settings, seed_defaults
 from monitor import start_auto_monitor, run_scan_and_create_incidents
 from slack_service import (
     create_incident_channel, post_incident_briefing,
     post_status_update, handle_slack_event
 )
-from team import init_team_db, add_member, list_members, delete_member, set_oncall, get_current_oncall
+from team import add_member, list_members, delete_member, set_oncall, get_current_oncall
 from utils.k8s_handler import is_k8s_available
-
-# ── Init DBs ──
-init_audit_db()
-init_incidents_db()
-init_settings_db()
-init_team_db()
 
 
 # ── Lifespan ──
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Créer les tables si elles n'existent pas (dev). En prod → Alembic.
+    Base.metadata.create_all(bind=engine)
+    seed_defaults()
+    print("✅ [DB] Tables créées / vérifiées")
+
     asyncio.create_task(start_auto_monitor())
     asyncio.create_task(_watch_incidents_loop())
     yield
 
 async def _watch_incidents_loop():
-    """Vérifie les incidents en mode 'watching' dont le timer a expiré."""
+    """Vérifie les incidents watching expirés."""
     while True:
         try:
-            expired = check_watch_incidents()
+            expired = await asyncio.to_thread(check_watch_incidents)
             if expired > 0:
                 print(f"⏰ [WATCHER] {expired} incident(s) watching → open")
         except Exception as e:
@@ -88,7 +89,6 @@ async def chat_endpoint(request: ChatRequest):
             except Exception as json_err:
                 print(f"Erreur parsing remediation JSON: {json_err}")
 
-        # Nettoyage des blocs JSON bruts
         clean_explanation = re.sub(r'\[\{.*?\}\]', '', clean_explanation, flags=re.DOTALL).strip()
         clean_explanation = re.sub(r'\{\".*?\"\}', '', clean_explanation, flags=re.DOTALL).strip()
         clean_explanation = re.sub(r'\n{3,}', '\n\n', clean_explanation).strip()
@@ -98,7 +98,7 @@ async def chat_endpoint(request: ChatRequest):
             "thread_id": t_id,
             "response": clean_explanation,
             "remediation": remediation_data,
-            "has_action": remediation_data is not None
+            "has_action": remediation_data is not None,
         }
     except Exception as e:
         print(f"API Error [/chat]: {e}")
@@ -111,7 +111,6 @@ async def chat_endpoint(request: ChatRequest):
 
 @app.get("/pods")
 async def get_pods(namespace: str = "default"):
-    """Liste les pods — supporte ?namespace=xxx."""
     try:
         from tools.k8s_core import list_pods_tool
         result = list_pods_tool.invoke({"namespace": namespace})
@@ -151,13 +150,11 @@ class AnalyzeRequest(BaseModel):
 
 @app.post("/remediation/analyze")
 async def analyze_pod(req: AnalyzeRequest):
-    """Lance une analyse IA sur un pod et retourne le diagnostic + actions proposées."""
     t_id = req.thread_id or f"sess_{uuid.uuid4().hex[:6]}"
     try:
         prompt = f"Analyse complète du pod {req.pod_name} dans le namespace {req.namespace}. Donne un diagnostic et propose une remédiation."
         full_response = await asyncio.to_thread(run_sre_system, prompt, t_id)
 
-        # Extraire le JSON de remédiation
         remediation_data = None
         json_match = re.search(r"<remediation_json>(.*?)</remediation_json>", full_response, re.DOTALL)
         clean_analysis = full_response
@@ -169,12 +166,10 @@ async def analyze_pod(req: AnalyzeRequest):
             except Exception:
                 pass
 
-        # Nettoyage
         clean_analysis = re.sub(r'\[\{.*?\}\]', '', clean_analysis, flags=re.DOTALL).strip()
         clean_analysis = re.sub(r'\{\".*?\"\}', '', clean_analysis, flags=re.DOTALL).strip()
         clean_analysis = re.sub(r'\n{3,}', '\n\n', clean_analysis).strip()
 
-        # Construire les actions depuis remediation_data
         actions = []
         if remediation_data and remediation_data.get("incident_detected"):
             actions.append({
@@ -191,7 +186,7 @@ async def analyze_pod(req: AnalyzeRequest):
             "thread_id": t_id,
             "analysis": clean_analysis,
             "actions": actions,
-            "remediation": remediation_data
+            "remediation": remediation_data,
         }
     except Exception as e:
         print(f"API Error [/remediation/analyze]: {e}")
@@ -209,6 +204,7 @@ class RemediationRequest(BaseModel):
 @app.post("/remediation/confirm")
 async def confirm_remediation(req: RemediationRequest):
     t_id = req.thread_id or f"sess_{uuid.uuid4().hex[:6]}"
+    action_id = None
     try:
         from tools.k8s_core import get_pod_manifest_tool
         snapshot = get_pod_manifest_tool.invoke({"pod_name": req.pod_name})
@@ -218,13 +214,13 @@ async def confirm_remediation(req: RemediationRequest):
             action_type=req.action_type,
             change_before=req.change_before,
             change_after=req.change_after,
-            rollback_snapshot={"manifest": str(snapshot)}
+            rollback_snapshot={"manifest": str(snapshot)},
         )
 
         full_response = await asyncio.to_thread(
             run_sre_system,
             f"OUI, applique le changement pour {req.deployment_name}. Change la mémoire à {req.change_after}.",
-            t_id
+            t_id,
         )
 
         update_action_status(action_id, "success")
@@ -234,10 +230,10 @@ async def confirm_remediation(req: RemediationRequest):
             "remediation_id": action_id,
             "action_id": action_id,
             "message": f"Patch appliqué sur {req.deployment_name}",
-            "response": full_response
+            "response": full_response,
         }
     except Exception as e:
-        if 'action_id' in locals():
+        if action_id:
             update_action_status(action_id, "failed")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -249,22 +245,23 @@ async def rollback_remediation(action_id: int):
             raise HTTPException(status_code=404, detail="Snapshot introuvable")
         update_action_status(action_id, "rolled_back")
         return {"status": "success", "message": "Rollback effectué", "snapshot": snapshot}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ═══════════════════════════════════════════════════
-# AUDIT — Historique des remédiations
+# AUDIT
 # ═══════════════════════════════════════════════════
 
 @app.get("/audit")
 async def get_audit():
-    """Retourne l'audit log. Clé 'entries' pour le frontend."""
     return {"status": "success", "entries": get_audit_log()}
 
 
 # ═══════════════════════════════════════════════════
-# INCIDENTS — CRUD + timeline + MTTR
+# INCIDENTS
 # ═══════════════════════════════════════════════════
 
 class IncidentCreate(BaseModel):
@@ -298,7 +295,7 @@ async def create_incident_endpoint(req: IncidentCreate):
             environment=req.environment,
             linked_pod=req.linked_pod,
             assigned_to=req.assigned_to,
-            watch_minutes=req.watch_minutes
+            watch_minutes=req.watch_minutes,
         )
 
         if incident:
@@ -354,7 +351,7 @@ async def get_mttr_endpoint():
 
 
 # ═══════════════════════════════════════════════════
-# SETTINGS — Configuration plateforme
+# SETTINGS
 # ═══════════════════════════════════════════════════
 
 class SettingsUpdate(BaseModel):
@@ -377,7 +374,7 @@ async def update_settings_endpoint(req: SettingsUpdate):
 
 
 # ═══════════════════════════════════════════════════
-# MONITOR — Scan manuel
+# MONITOR
 # ═══════════════════════════════════════════════════
 
 @app.post("/monitor/scan")
@@ -390,7 +387,7 @@ async def manual_scan():
 
 
 # ═══════════════════════════════════════════════════
-# TEAM — Membres + On-call
+# TEAM
 # ═══════════════════════════════════════════════════
 
 class MemberCreate(BaseModel):
@@ -446,11 +443,10 @@ async def get_oncall_endpoint():
 
 
 # ═══════════════════════════════════════════════════
-# CLUSTERS — Fleet overview (Phase 4)
+# CLUSTERS
 # ═══════════════════════════════════════════════════
 
 def _detect_provider() -> dict:
-    """Détecte le provider K8s à partir du contexte kubeconfig."""
     provider = {"id": "k3s", "name": "K3s", "color": "#FFC61C"}
     try:
         from kubernetes import config as k8s_config
@@ -473,11 +469,9 @@ def _detect_provider() -> dict:
     return provider
 
 
-def _get_cluster_info() -> dict:
-    """Retourne les informations du cluster connecté."""
+def _get_cluster_info() -> dict | None:
     if not is_k8s_available():
         return None
-
     try:
         from utils.k8s_handler import get_v1_client
         from kubernetes import config as k8s_config
@@ -485,37 +479,28 @@ def _get_cluster_info() -> dict:
         v1 = get_v1_client()
         provider = _detect_provider()
 
-        # Contexte actif
         contexts, active = k8s_config.list_kube_config_contexts()
         ctx_name = active.get("name", "unknown") if active else "unknown"
         cluster_name = active.get("context", {}).get("cluster", ctx_name) if active else ctx_name
 
-        # Nodes
         nodes = v1.list_node()
         node_count = len(nodes.items)
         k8s_version = nodes.items[0].status.node_info.kubelet_version if nodes.items else "unknown"
 
-        # Région (si disponible dans les labels)
         region = "local"
         if nodes.items:
             labels = nodes.items[0].metadata.labels or {}
             region = labels.get("topology.kubernetes.io/region",
                      labels.get("failure-domain.beta.kubernetes.io/region", "local"))
 
-        # Namespaces
         ns_list = v1.list_namespace()
         namespaces = [ns.metadata.name for ns in ns_list.items]
 
-        # Pods santé globale
         namespace = get_setting("watched_namespace") or "default"
         from tools.k8s_core import list_pods_tool
         pods = list_pods_tool.invoke({"namespace": namespace})
 
-        pods_total = 0
-        pods_healthy = 0
-        pods_unhealthy = 0
-        total_restarts = 0
-
+        pods_total = pods_healthy = pods_unhealthy = total_restarts = 0
         if isinstance(pods, list):
             pods_total = len(pods)
             pods_healthy = len([p for p in pods if p["health_status"] == "HEALTHY"])
@@ -552,7 +537,6 @@ def _get_cluster_info() -> dict:
 
 @app.get("/clusters")
 async def list_clusters():
-    """Retourne la liste des clusters connectés (pour l'instant un seul)."""
     try:
         cluster = await asyncio.to_thread(_get_cluster_info)
         clusters = [cluster] if cluster else []
@@ -563,18 +547,11 @@ async def list_clusters():
             "k8s_available": is_k8s_available(),
         }
     except Exception as e:
-        return {
-            "status": "degraded",
-            "clusters": [],
-            "total": 0,
-            "k8s_available": False,
-            "message": str(e),
-        }
+        return {"status": "degraded", "clusters": [], "total": 0, "k8s_available": False, "message": str(e)}
 
 
 @app.get("/clusters/{cluster_id}/stats")
 async def get_cluster_stats(cluster_id: str):
-    """Stats détaillées d'un cluster."""
     try:
         cluster = await asyncio.to_thread(_get_cluster_info)
         if not cluster or cluster["id"] != cluster_id:
@@ -599,11 +576,7 @@ async def get_cluster_stats(cluster_id: str):
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "ok",
-        "version": "2.0.0",
-        "k8s_available": is_k8s_available(),
-    }
+    return {"status": "ok", "version": "2.0.0", "k8s_available": is_k8s_available()}
 
 @app.post("/slack/events")
 async def slack_events(request: Request):

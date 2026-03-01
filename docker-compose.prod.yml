@@ -1,18 +1,39 @@
 version: "3.9"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jamono-db
+    restart: always
+    environment:
+      POSTGRES_USER: jamono
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: jamono
+    volumes:
+      - jamono-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jamono"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - jamono-net
+
   backend:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
     container_name: jamono-backend
     restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
+      - DATABASE_URL=postgresql://jamono:${POSTGRES_PASSWORD}@postgres:5432/jamono
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
     networks:
       - jamono-net
-    volumes:
-      - jamono-data:/app/data
 
   frontend:
     build:
@@ -40,7 +61,7 @@ services:
       - jamono-net
 
 volumes:
-  jamono-data:
+  jamono-pgdata:
 
 networks:
   jamono-net:

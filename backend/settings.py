@@ -1,92 +1,79 @@
-# Gestion des paramètres de la plateforme — stockage SQLite clé/valeur avec valeurs par défaut
-import os
-import sqlite3
+# Gestion des paramètres — SQLAlchemy PostgreSQL (clé/valeur)
 import json
-
-DB_PATH = "data/settings.db"
+from database import SessionLocal
+from models import Setting
 
 DEFAULTS = {
-    # Général
     "org_name": "Mon Organisation",
     "timezone": "America/Toronto",
-
-    # Cluster
     "scan_mode": "manual",
-    "scan_interval_seconds": 60,
+    "scan_interval_seconds": "60",
     "watched_namespace": "default",
-
-    # Incidents
     "auto_create_incidents": "false",
     "auto_create_min_severity": "high",
     "auto_assign": "false",
-
-    # Slack
     "slack_enabled": "false",
     "slack_bot_token": "",
     "slack_default_channel": "#incidents",
     "slack_create_channel_per_incident": "true",
-
-    # Équipe
     "oncall_members": "[]",
 }
 
-def init_settings_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )
-    """)
-    # Insère les valeurs par défaut si elles n'existent pas
-    for key, value in DEFAULTS.items():
-        conn.execute(
-            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
-            (key, str(value))
-        )
-    conn.commit()
-    conn.close()
+
+def seed_defaults():
+    """Insère les valeurs par défaut si elles n'existent pas."""
+    db = SessionLocal()
+    try:
+        for key, value in DEFAULTS.items():
+            exists = db.query(Setting).filter(Setting.key == key).first()
+            if not exists:
+                db.add(Setting(key=key, value=str(value)))
+        db.commit()
+    finally:
+        db.close()
+
 
 def get_all_settings() -> dict:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.execute("SELECT key, value FROM settings")
-    rows = cursor.fetchall()
-    conn.close()
-    result = {}
-    for key, value in rows:
-        # On parse les JSON automatiquement
-        try:
-            result[key] = json.loads(value)
-        except Exception:
-            result[key] = value
-    return result
+    db = SessionLocal()
+    try:
+        rows = db.query(Setting).all()
+        result = {}
+        for row in rows:
+            try:
+                result[row.key] = json.loads(row.value)
+            except (json.JSONDecodeError, TypeError):
+                result[row.key] = row.value
+        return result
+    finally:
+        db.close()
+
 
 def get_setting(key: str):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
-    row = cursor.fetchone()
-    conn.close()
-    if not row:
-        return DEFAULTS.get(key)
+    db = SessionLocal()
     try:
-        return json.loads(row[0])
-    except Exception:
-        return row[0]
+        row = db.query(Setting).filter(Setting.key == key).first()
+        if not row:
+            return DEFAULTS.get(key)
+        try:
+            return json.loads(row.value)
+        except (json.JSONDecodeError, TypeError):
+            return row.value
+    finally:
+        db.close()
 
-def update_settings(updates: dict):
-    conn = sqlite3.connect(DB_PATH)
-    for key, value in updates.items():
-        if isinstance(value, bool):
-            value = json.dumps(value)
-        elif isinstance(value, (dict, list)):
-            value = json.dumps(value)
-        conn.execute(
-            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-            (key, str(value))
-        )
-    conn.commit()
-    conn.close()
+
+def update_settings(updates: dict) -> dict:
+    db = SessionLocal()
+    try:
+        for key, value in updates.items():
+            if isinstance(value, (bool, dict, list)):
+                value = json.dumps(value)
+            existing = db.query(Setting).filter(Setting.key == key).first()
+            if existing:
+                existing.value = str(value)
+            else:
+                db.add(Setting(key=key, value=str(value)))
+        db.commit()
+    finally:
+        db.close()
     return get_all_settings()
-
-init_settings_db()

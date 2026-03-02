@@ -128,13 +128,18 @@ export default function Sidebar() {
   const [clusterDropdown, setClusterDropdown] = useState(false);
   const [selectedCluster, setSelectedCluster] = useState(CLUSTERS[0]);
 
-  // ── Existing API calls — untouched ──
-  useEffect(() => {
-    axios.get(`${API_URL}/team`).then(r => setOncall(r.data.oncall)).catch(() => {});
+  const fetchIncidents = () => {
     axios.get(`${API_URL}/incidents`).then(r => {
       const open = r.data.incidents?.filter((i: any) => i.status === "open" || i.status === "in_progress").length || 0;
       setOpenIncidents(open);
     }).catch(() => {});
+  };
+
+  useEffect(() => {
+    axios.get(`${API_URL}/team`).then(r => setOncall(r.data.oncall)).catch(() => {});
+    fetchIncidents();
+    const interval = setInterval(fetchIncidents, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   return (

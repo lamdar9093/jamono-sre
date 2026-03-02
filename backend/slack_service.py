@@ -190,7 +190,7 @@ async def handle_slack_event(body: dict):
     if event.get("bot_id"):
         return
 
-    if event_type == "app_mention":
+    if event_type in ("app_mention", "message") and event.get("text") and "<@" in event.get("text", ""):
         try:
             await handle_mention(event)
         except Exception as e:

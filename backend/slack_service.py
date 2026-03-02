@@ -190,7 +190,17 @@ async def handle_slack_event(body: dict):
         return
 
     if event_type == "app_mention":
-        await handle_mention(event)
+        try:
+            await handle_mention(event)
+        except Exception as e:
+            print(f"❌ [SLACK] Erreur handle_mention : {e}")
+            client = get_slack_client()
+            channel_id = event.get("channel")
+            if client and channel_id:
+                try:
+                    client.chat_postMessage(channel=channel_id, text=f"❌ Erreur interne : `{e}`")
+                except Exception:
+                    pass
 
 async def handle_mention(event: dict):
     """Traite une mention @Jamono dans un canal."""

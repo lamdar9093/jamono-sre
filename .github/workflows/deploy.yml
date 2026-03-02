@@ -21,11 +21,11 @@ jobs:
 
       - name: Add VPS to known hosts
         run: |
-          ssh-keyscan -p 2222 -H jamono.io >> ~/.ssh/known_hosts
+          ssh-keyscan -p 2468 -H jamono.io >> ~/.ssh/known_hosts
 
       - name: Copy files to VPS
         run: |
-          rsync -avz -e "ssh -p 2222" --exclude='.git' \
+          rsync -avz -e "ssh -p 2468" --exclude='.git' \
             --exclude='backend/.env' \
             --exclude='backend/*.db' \
             --exclude='backend/__pycache__' \
@@ -35,17 +35,15 @@ jobs:
 
       - name: Deploy on VPS
         run: |
-            ssh -p 2222 root@jamono.io << 'EOF'
+            ssh -p 2468 root@jamono.io << 'EOF'
             cd /opt/jamono
             
             # Créer le .env depuis les secrets
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
             echo "LLM_PROVIDER=${LLM_PROVIDER:-openai}" >> .env
-            echo "DATABASE_URL=postgresql://jamono:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/jamono" >> .env
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > backend/.env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> backend/.env
-            echo "DATABASE_URL=postgresql://jamono:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/jamono" >> backend/.env
             
             # Build et restart
             docker compose -f docker-compose.prod.yml build --no-cache

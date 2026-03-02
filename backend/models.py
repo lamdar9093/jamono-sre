@@ -142,6 +142,54 @@ class Setting(Base):
     value = Column(Text, nullable=False)
 
 
+class Integration(Base):
+    __tablename__ = "integrations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    type = Column(String(50), unique=True, nullable=False, index=True)  # jira, slack, teams...
+    display_name = Column(String(100), nullable=False)
+    category = Column(String(50), nullable=False)  # ticketing, communication, alerting
+    config_json = Column(Text)  # Credentials + config (chiffrés en phase auth)
+    is_active = Column(Boolean, default=False)
+    connected_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "type": self.type,
+            "display_name": self.display_name,
+            "category": self.category,
+            "is_active": self.is_active,
+            "connected_at": self.connected_at.isoformat() if self.connected_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            # Ne pas exposer config_json (credentials)
+        }
+
+
+class IncidentIntegration(Base):
+    """Lien entre un incident et une ressource externe (ticket Jira, etc.)."""
+    __tablename__ = "incident_integrations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True)
+    integration_type = Column(String(50), nullable=False, index=True)  # jira, servicenow...
+    external_id = Column(String(255))  # JIRA-123, etc.
+    external_url = Column(String(500))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "incident_id": self.incident_id,
+            "integration_type": self.integration_type,
+            "external_id": self.external_id,
+            "external_url": self.external_url,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 # Index composites pour les queries fréquentes
 Index("ix_incidents_status_env", Incident.status, Incident.environment)
 Index("ix_incidents_watching", Incident.status, Incident.watch_until)
+Index("ix_incident_integrations_lookup", IncidentIntegration.incident_id, IncidentIntegration.integration_type)

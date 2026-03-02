@@ -26,6 +26,13 @@ from slack_service import (
 )
 from team import add_member, list_members, delete_member, set_oncall, get_current_oncall
 from utils.k8s_handler import is_k8s_available
+from integrations import (
+    init_registry, list_integrations, get_integration, connect_integration,
+    disconnect_integration, delete_integration, test_integration,
+    dispatch_incident_created, dispatch_incident_updated,
+    create_ticket_manual, get_incident_links, handle_integration_webhook,
+)
+from integrations.registry import IntegrationRegistry
 
 
 # ── Lifespan ──
@@ -34,6 +41,7 @@ async def lifespan(app: FastAPI):
     # Créer les tables si elles n'existent pas (dev). En prod → Alembic.
     Base.metadata.create_all(bind=engine)
     seed_defaults()
+    init_registry()
     print("✅ [DB] Tables créées / vérifiées")
 
     asyncio.create_task(start_auto_monitor())
@@ -306,6 +314,12 @@ async def create_incident_endpoint(req: IncidentCreate):
                 incident["slack_channel"] = channel_id
                 post_incident_briefing(channel_id, incident)
 
+            # Dispatch vers intégrations actives (Jira, Teams, etc.)
+            try:
+                dispatch_incident_created(incident)
+            except Exception as e:
+                print(f"⚠️  [DISPATCH] Erreur dispatch create: {e}")
+
         return {"status": "success", "incident": incident}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -333,6 +347,13 @@ async def update_status_endpoint(incident_id: int, req: StatusUpdate):
         incident = update_incident_status(incident_id, req.status, req.author, req.detail)
         if incident and incident.get("slack_channel"):
             post_status_update(incident["slack_channel"], incident_id, req.status, req.author)
+
+        # Dispatch vers intégrations actives
+        if incident:
+            try:
+                dispatch_incident_updated(incident, req.status)
+            except Exception as e:
+                print(f"⚠️  [DISPATCH] Erreur dispatch update: {e}")
         return {"status": "success", "incident": incident}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -568,6 +589,107 @@ async def get_cluster_stats(cluster_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════
+# INTEGRATIONS — Framework connecteurs
+# ═══════════════════════════════════════════════════
+
+@app.get("/integrations/available")
+async def list_available_integrations():
+    """Liste tous les providers disponibles (installés) avec leur schéma de config."""
+    return {"status": "success", "providers": IntegrationRegistry.list_all()}
+
+@app.get("/integrations")
+async def list_active_integrations():
+    """Liste les intégrations configurées/connectées."""
+    try:
+        integrations = list_integrations()
+        return {"status": "success", "integrations": integrations}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/integrations/{integration_type}")
+async def get_integration_endpoint(integration_type: str):
+    integration = get_integration(integration_type)
+    if not integration:
+        raise HTTPException(status_code=404, detail="Intégration non trouvée")
+    return {"status": "success", "integration": integration}
+
+class IntegrationConnect(BaseModel):
+    credentials: dict
+
+@app.post("/integrations/{integration_type}/connect")
+async def connect_integration_endpoint(integration_type: str, req: IntegrationConnect):
+    try:
+        integration = connect_integration(integration_type, req.credentials)
+        return {"status": "success", "integration": integration}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/integrations/{integration_type}/test")
+async def test_integration_endpoint(integration_type: str, req: IntegrationConnect):
+    try:
+        result = test_integration(integration_type, req.credentials)
+        return {"status": "success", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/integrations/{integration_type}/disconnect")
+async def disconnect_integration_endpoint(integration_type: str):
+    try:
+        disconnect_integration(integration_type)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/integrations/{integration_type}")
+async def delete_integration_endpoint(integration_type: str):
+    try:
+        delete_integration(integration_type)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Création manuelle de ticket depuis un incident
+class ManualTicketRequest(BaseModel):
+    integration_type: str
+
+@app.post("/incidents/{incident_id}/ticket")
+async def create_ticket_endpoint(incident_id: int, req: ManualTicketRequest):
+    try:
+        result = create_ticket_manual(incident_id, req.integration_type)
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["message"])
+        return {"status": "success", **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Liens externes d'un incident
+@app.get("/incidents/{incident_id}/links")
+async def get_incident_links_endpoint(incident_id: int):
+    try:
+        links = get_incident_links(incident_id)
+        return {"status": "success", "links": links}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Webhooks entrants des intégrations
+@app.post("/webhooks/{integration_type}")
+async def integration_webhook(integration_type: str, request: Request):
+    try:
+        payload = await request.json()
+        result = handle_integration_webhook(integration_type, payload)
+        return result
+    except Exception as e:
+        print(f"❌ [WEBHOOK] Erreur {integration_type}: {e}")
+        return {"success": False, "message": str(e)}
 
 
 # ═══════════════════════════════════════════════════

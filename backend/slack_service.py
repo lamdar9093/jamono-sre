@@ -184,6 +184,7 @@ async def handle_slack_event(body: dict):
     """Traite les événements Slack — mentions du bot et messages dans les canaux d'incident."""
     event = body.get("event", {})
     event_type = event.get("type")
+    print(f"[SLACK DEBUG] type={event_type} bot_id={event.get('bot_id')} subtype={event.get('subtype')} text={event.get('text','')[:80]}")
 
     # Ignorer les messages du bot lui-même
     if event.get("bot_id"):

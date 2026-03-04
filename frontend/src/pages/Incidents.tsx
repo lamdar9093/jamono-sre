@@ -201,7 +201,7 @@ export default function Incidents() {
       {/* Table */}
       <div style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "40px 80px 1fr 75px 95px 80px 55px", padding: "8px 16px", gap: 10, borderBottom: "1px solid var(--b1)" }}>
-          {["#", "Sévérité", "Titre", "Slack", "Statut", "Assigné", "Âge"].map(h => (
+          {["#", "Sévérité", "Titre", "Canal", "Statut", "Assigné", "Âge"].map(h => (
             <span key={h} style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>{h}</span>
           ))}
         </div>
@@ -277,6 +277,8 @@ function DetailDrawer({ selected, timeline, onClose, updateStatus, Pill, StatusB
               <span style={{ fontFamily: "var(--fm)", fontSize: 12, color: "var(--slack)", fontWeight: 600 }}>{selected.slack_channel}</span>
             </div>
           )}
+          {/* External links (Jira, etc.) */}
+          <IncidentLinks incidentId={selected.id} />
           {selected.status !== "resolved" && (
             <div>
               <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8, fontWeight: 600 }}>Changer le statut</div>
@@ -318,6 +320,79 @@ function DetailDrawer({ selected, timeline, onClose, updateStatus, Pill, StatusB
   );
 }
 
+function IncidentLinks({ incidentId }: { incidentId: number }) {
+  const [links, setLinks] = useState<{ id: number; integration_type: string; external_id: string; external_url: string; created_at: string }[]>([]);
+  const [creating, setCreating] = useState<string | null>(null);
+
+  const fetchLinks = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/incidents/${incidentId}/links`);
+      setLinks(res.data.links ?? []);
+    } catch (e) { /* silent */ }
+  };
+
+  useEffect(() => { fetchLinks(); }, [incidentId]);
+
+  const createTicket = async (type: string) => {
+    setCreating(type);
+    try {
+      await axios.post(`${API_URL}/incidents/${incidentId}/ticket`, { integration_type: type });
+      fetchLinks();
+    } catch (e) { console.error(e); }
+    finally { setCreating(null); }
+  };
+
+  const LINK_STYLE: Record<string, { bg: string; fg: string; border: string; label: string }> = {
+    jira:       { bg: "rgba(0,82,204,0.08)", fg: "#0052CC", border: "rgba(0,82,204,0.15)", label: "Jira" },
+    servicenow: { bg: "rgba(0,133,55,0.08)", fg: "#008537", border: "rgba(0,133,55,0.15)", label: "ServiceNow" },
+    github:     { bg: "rgba(255,255,255,0.04)", fg: "var(--t1)", border: "var(--b2)", label: "GitHub" },
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {/* Existing links */}
+      {links.map(link => {
+        const s = LINK_STYLE[link.integration_type] || LINK_STYLE.github;
+        return (
+          <a key={link.id} href={link.external_url || "#"} target="_blank" rel="noopener noreferrer" style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "8px 14px", borderRadius: "var(--r)",
+            background: s.bg, border: `1px solid ${s.border}`,
+            textDecoration: "none", transition: "all 0.12s",
+          }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = s.fg; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = s.border; }}
+          >
+            <span style={{ fontFamily: "var(--fm)", fontSize: 9, fontWeight: 700, color: s.fg, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</span>
+            <span style={{ fontFamily: "var(--fm)", fontSize: 12, color: s.fg, fontWeight: 600 }}>{link.external_id}</span>
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke={s.fg} strokeWidth="1.5" strokeLinecap="round" style={{ marginLeft: "auto", opacity: 0.5 }}>
+              <path d="M6 3h7v7M13 3L6 10"/>
+            </svg>
+          </a>
+        );
+      })}
+      {/* Create ticket buttons (only for ticketing integrations without existing link) */}
+      {!links.some(l => l.integration_type === "jira") && (
+        <button onClick={() => createTicket("jira")} disabled={creating === "jira"} style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          padding: "7px 14px", borderRadius: "var(--r)",
+          fontFamily: "var(--fm)", fontSize: 11, fontWeight: 500,
+          cursor: creating === "jira" ? "not-allowed" : "pointer",
+          border: "1px dashed rgba(0,82,204,0.25)", background: "transparent",
+          color: "#0052CC", opacity: creating === "jira" ? 0.5 : 1,
+          transition: "all 0.12s",
+        }}
+          onMouseEnter={e => { if (creating !== "jira") { (e.currentTarget as HTMLElement).style.background = "rgba(0,82,204,0.06)"; (e.currentTarget as HTMLElement).style.borderStyle = "solid"; } }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderStyle = "dashed"; }}
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>
+          {creating === "jira" ? "Création..." : "Créer un ticket Jira"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ActionBtn({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
   return (
     <button onClick={onClick} style={{ padding: "6px 14px", borderRadius: "var(--r)", fontFamily: "var(--f)", fontSize: 12, fontWeight: 500, cursor: "pointer", border: `1px solid ${color}25`, background: `${color}12`, color, transition: "all 0.12s" }}
@@ -328,38 +403,73 @@ function ActionBtn({ label, color, onClick }: { label: string; color: string; on
 }
 
 function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [form, setForm] = useState({ title: "", description: "", severity: "medium", source: "manual", environment: "prod", linked_pod: "", assigned_to: "", watch_minutes: 15 });
+  const [form, setForm] = useState({ title: "", description: "", severity: "medium", environment: "prod", linked_pod: "", assigned_to: "" });
   const [saving, setSaving] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [activeIntegrations, setActiveIntegrations] = useState<{ type: string; display_name: string; category: string }[]>([]);
+  const [actions, setActions] = useState<Record<string, boolean>>({});
+
   const errors: Record<string, string> = {};
   if (touched.title && !form.title.trim()) errors.title = "Le titre est requis";
+
+  // Fetch active integrations on mount
+  useEffect(() => {
+    axios.get(`${API_URL}/integrations`).then(r => {
+      const active = (r.data.integrations ?? []).filter((i: any) => i.is_active);
+      setActiveIntegrations(active);
+    }).catch(() => {});
+  }, []);
+
+  // Smart defaults — update toggles when severity/env changes
+  useEffect(() => {
+    const defaults: Record<string, boolean> = {};
+    const sev = form.severity;
+    const env = form.environment;
+
+    activeIntegrations.forEach(i => {
+      if (i.category === "ticketing") {
+        defaults[i.type] = (sev === "critical" || sev === "high") && env === "prod";
+      } else if (i.category === "communication") {
+        defaults[i.type] = !(sev === "low" && env === "dev");
+      } else {
+        defaults[i.type] = false;
+      }
+    });
+
+    defaults["slack"] = (sev === "critical" || sev === "high") && env === "prod";
+
+    setActions(defaults);
+  }, [form.severity, form.environment, activeIntegrations]);
+
+  const toggleAction = (key: string) => setActions(p => ({ ...p, [key]: !p[key] }));
 
   const submit = async () => {
     setTouched({ title: true });
     if (!form.title.trim()) return;
     setSaving(true);
     try {
-      await axios.post(`${API_URL}/incidents`, { ...form, linked_pod: form.linked_pod || null, assigned_to: form.assigned_to || null, watch_minutes: form.source === "watch" ? form.watch_minutes : null });
+      const selectedActions = Object.entries(actions).filter(([_, v]) => v).map(([k]) => k);
+      await axios.post(`${API_URL}/incidents`, {
+        ...form,
+        source: "manual",
+        linked_pod: form.linked_pod || null,
+        assigned_to: form.assigned_to || null,
+        actions: selectedActions.length > 0 ? selectedActions : null,
+      });
       onCreated();
     } catch (e) { console.error(e); }
     finally { setSaving(false); }
   };
 
+  const ACTION_STYLE: Record<string, { fg: string; bg: string; border: string; label: string; icon: string }> = {
+    slack: { fg: "var(--slack)", bg: "var(--slack-a)", border: "rgba(224,30,90,0.15)", label: "Canal Slack", icon: "SLK" },
+    jira: { fg: "#0052CC", bg: "rgba(0,82,204,0.08)", border: "rgba(0,82,204,0.15)", label: "Ticket Jira", icon: "JRA" },
+    teams: { fg: "#6264A7", bg: "rgba(98,100,167,0.08)", border: "rgba(98,100,167,0.15)", label: "Notif Teams", icon: "TMS" },
+    servicenow: { fg: "#008537", bg: "rgba(0,133,55,0.08)", border: "rgba(0,133,55,0.15)", label: "Ticket ServiceNow", icon: "SNW" },
+  };
+
   return (
     <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <FormField label="Type">
-        <div style={{ display: "flex", gap: 6 }}>
-          {[{ v: "manual", l: "Manuel" }, { v: "watch", l: "Surveillance" }].map(t => (
-            <button key={t.v} onClick={() => setForm(p => ({ ...p, source: t.v }))} style={{ flex: 1, padding: "8px", borderRadius: "var(--r)", fontFamily: "var(--fm)", fontSize: 12, cursor: "pointer", border: form.source === t.v ? "1px solid var(--brand-b)" : "1px solid var(--b2)", background: form.source === t.v ? "var(--brand-a)" : "transparent", color: form.source === t.v ? "var(--brand2)" : "var(--t3)", fontWeight: form.source === t.v ? 600 : 400, transition: "all 0.12s" }}>{t.l}</button>
-          ))}
-        </div>
-      </FormField>
-      {form.source === "watch" && (
-        <FormField label="Timer surveillance (minutes)">
-          <input type="number" value={form.watch_minutes} onChange={e => setForm(p => ({ ...p, watch_minutes: parseInt(e.target.value) }))} style={formInput} />
-          <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", marginTop: 4 }}>Si non résolu → incident ouvert automatiquement</p>
-        </FormField>
-      )}
       <FormField label="Titre" required error={errors.title}>
         <input type="text" value={form.title} placeholder="Ex: API gateway timeout en prod" onChange={e => setForm(p => ({ ...p, title: e.target.value }))} onBlur={() => setTouched(p => ({ ...p, title: true }))} style={{ ...formInput, borderColor: errors.title ? "var(--re)" : undefined }} />
       </FormField>
@@ -379,10 +489,89 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
         </FormField>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <FormField label="Pod lié"><input type="text" value={form.linked_pod} placeholder="crash-app2" onChange={e => setForm(p => ({ ...p, linked_pod: e.target.value }))} style={formInput} /></FormField>
+        <FormField label="Pod / Service lié"><input type="text" value={form.linked_pod} placeholder="gateway-pod ou service-api" onChange={e => setForm(p => ({ ...p, linked_pod: e.target.value }))} style={formInput} /></FormField>
         <FormField label="Assigné à"><input type="text" value={form.assigned_to} placeholder="@username" onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} style={formInput} /></FormField>
       </div>
+
+      {/* ── Actions à déclencher ── */}
+      <div>
+        <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8, fontWeight: 600 }}>
+          Actions à déclencher
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <ActionToggle
+            label="Canal Slack"
+            icon="SLK"
+            fg="var(--slack)"
+            bg="var(--slack-a)"
+            border="rgba(224,30,90,0.15)"
+            checked={actions["slack"] ?? false}
+            onChange={() => toggleAction("slack")}
+          />
+          {activeIntegrations.map(i => {
+            const s = ACTION_STYLE[i.type];
+            if (!s) return null;
+            return (
+              <ActionToggle
+                key={i.type}
+                label={s.label}
+                icon={s.icon}
+                fg={s.fg}
+                bg={s.bg}
+                border={s.border}
+                checked={actions[i.type] ?? false}
+                onChange={() => toggleAction(i.type)}
+              />
+            );
+          })}
+        </div>
+        <p style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginTop: 6, fontStyle: "italic" }}>
+          Pré-sélection basée sur la sévérité et l'environnement
+        </p>
+      </div>
+
       <FormActions onCancel={onClose} onSubmit={submit} submitLabel={saving ? "Création..." : "Déclarer"} submitting={saving} disabled={!form.title.trim()} />
     </div>
+  );
+}
+
+function ActionToggle({ label, icon, fg, bg, border, checked, onChange }: {
+  label: string; icon: string; fg: string; bg: string; border: string; checked: boolean; onChange: () => void;
+}) {
+  return (
+    <button onClick={onChange} style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "8px 12px", borderRadius: "var(--r)",
+      background: checked ? bg : "transparent",
+      border: `1px solid ${checked ? border : "var(--b2)"}`,
+      cursor: "pointer", transition: "all 0.12s", width: "100%",
+    }}>
+      <div style={{
+        width: 22, height: 22, borderRadius: 6,
+        background: checked ? `${fg}18` : "var(--s2)",
+        border: `1px solid ${checked ? `${fg}30` : "var(--b2)"}`,
+        display: "grid", placeItems: "center",
+        fontFamily: "var(--fm)", fontSize: 7, fontWeight: 700,
+        color: checked ? fg : "var(--t3)",
+        transition: "all 0.12s",
+      }}>{icon}</div>
+      <span style={{
+        fontFamily: "var(--fm)", fontSize: 11, fontWeight: 500,
+        color: checked ? fg : "var(--t3)",
+        flex: 1, textAlign: "left", transition: "color 0.12s",
+      }}>{label}</span>
+      <div style={{
+        width: 32, height: 18, borderRadius: 9,
+        background: checked ? fg : "var(--s3)",
+        position: "relative", transition: "background 0.15s",
+      }}>
+        <div style={{
+          width: 12, height: 12, borderRadius: "50%", background: "#fff",
+          position: "absolute", top: 3,
+          left: checked ? 17 : 3,
+          transition: "left 0.15s",
+        }} />
+      </div>
+    </button>
   );
 }

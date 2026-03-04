@@ -281,6 +281,7 @@ class IncidentCreate(BaseModel):
     linked_pod: Optional[str] = None
     assigned_to: Optional[str] = None
     watch_minutes: Optional[int] = None
+    actions: Optional[list[str]] = None  # ["jira", "slack", "teams"] — None = aucune action
 
 class StatusUpdate(BaseModel):
     status: str
@@ -307,18 +308,23 @@ async def create_incident_endpoint(req: IncidentCreate):
         )
 
         if incident:
-            component = req.linked_pod or req.title[:20]
-            channel_id = create_incident_channel(incident["id"], component)
-            if channel_id:
-                update_slack_channel(incident["id"], channel_id)
-                incident["slack_channel"] = channel_id
-                post_incident_briefing(channel_id, incident)
+            requested_actions = req.actions or []
 
-            # Dispatch vers intégrations actives (Jira, Teams, etc.)
-            try:
-                dispatch_incident_created(incident)
-            except Exception as e:
-                print(f"⚠️  [DISPATCH] Erreur dispatch create: {e}")
+            # Slack — créer canal si demandé
+            if "slack" in requested_actions:
+                component = req.linked_pod or req.title[:20]
+                channel_id = create_incident_channel(incident["id"], component)
+                if channel_id:
+                    update_slack_channel(incident["id"], channel_id)
+                    incident["slack_channel"] = channel_id
+                    post_incident_briefing(channel_id, incident)
+
+            # Dispatch ciblé vers les intégrations demandées (Jira, Teams, etc.)
+            if requested_actions:
+                try:
+                    dispatch_incident_created(incident, requested_actions)
+                except Exception as e:
+                    print(f"⚠️  [DISPATCH] Erreur dispatch create: {e}")
 
         return {"status": "success", "incident": incident}
     except Exception as e:

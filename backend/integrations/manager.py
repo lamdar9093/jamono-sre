@@ -128,23 +128,29 @@ def test_integration(integration_type: str, credentials: dict) -> dict:
 # Dispatch — appelé par le cycle de vie des incidents
 # ═══════════════════════════════════════════════════
 
-def dispatch_incident_created(incident: dict):
-    """Dispatch l'événement 'incident créé' vers toutes les intégrations actives."""
+def dispatch_incident_created(incident: dict, requested_actions: list[str] = None):
+    """
+    Dispatch l'événement 'incident créé' vers les intégrations.
+    Si requested_actions est fourni, dispatch uniquement vers ces types.
+    Ignore les flags auto_create/auto_notify — l'admin a choisi explicitement.
+    """
     db = SessionLocal()
     try:
         actives = db.query(Integration).filter(Integration.is_active == True).all()
         for integration in actives:
+            # Si actions ciblées, ne dispatch que vers celles demandées
+            if requested_actions is not None:
+                if integration.type not in requested_actions:
+                    continue
+            else:
+                # Pas d'actions demandées = aucun dispatch
+                return
+
             provider = IntegrationRegistry.get(integration.type)
             if not provider:
                 continue
 
             config = json.loads(integration.config_json) if integration.config_json else {}
-
-            # Vérifier auto_create / auto_notify selon le type
-            if integration.category == "ticketing" and not config.get("auto_create"):
-                continue
-            if integration.category == "communication" and not config.get("auto_notify"):
-                continue
 
             try:
                 result = provider.on_incident_created(incident, config)

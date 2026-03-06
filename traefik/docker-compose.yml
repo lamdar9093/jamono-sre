@@ -16,13 +16,6 @@ services:
       - traefik-certs:/etc/traefik/acme
     networks:
       - traefik-net
-    labels:
-      - "traefik.enable=true"
-      # Dashboard (optionnel, protégé par IP ou désactivable)
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.jamono.io`)"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.dashboard.service=api@internal"
 
 volumes:
   traefik-certs:

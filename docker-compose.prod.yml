@@ -37,7 +37,7 @@ services:
       - traefik-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.jamono-backend.rule=Host(`jamono.io`, `www.jamono.io`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.jamono-backend.rule=(Host(`jamono.io`) || Host(`www.jamono.io`)) && PathPrefix(`/api/`)"
       - "traefik.http.routers.jamono-backend.entrypoints=websecure"
       - "traefik.http.routers.jamono-backend.tls.certresolver=letsencrypt"
       - "traefik.http.routers.jamono-backend.middlewares=jamono-strip-api"
@@ -55,7 +55,7 @@ services:
       - traefik-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.jamono-frontend.rule=Host(`jamono.io`, `www.jamono.io`) && !PathPrefix(`/api/`)"
+      - "traefik.http.routers.jamono-frontend.rule=(Host(`jamono.io`) || Host(`www.jamono.io`)) && !PathPrefix(`/api/`)"
       - "traefik.http.routers.jamono-frontend.entrypoints=websecure"
       - "traefik.http.routers.jamono-frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.jamono-frontend.loadbalancer.server.port=80"

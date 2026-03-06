@@ -659,6 +659,42 @@ async def delete_integration_endpoint(integration_type: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Découverte de ressources (projets Jira, canaux Slack, etc.)
+@app.get("/integrations/{integration_type}/discover/{resource_type}")
+async def discover_resources_endpoint(integration_type: str, resource_type: str, project_key: Optional[str] = None):
+    """Fetch dynamique des ressources d'un service externe."""
+    from integrations.manager import get_integration_config
+    provider = IntegrationRegistry.get(integration_type)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider non trouvé")
+    config = get_integration_config(integration_type)
+    if not config:
+        raise HTTPException(status_code=400, detail="Intégration non connectée")
+    try:
+        kwargs = {}
+        if project_key:
+            kwargs["project_key"] = project_key
+        resources = await asyncio.to_thread(provider.discover_resources, resource_type, config, **kwargs)
+        return {"status": "success", "resources": resources}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Mise à jour de la config d'une intégration (projet, type de ticket, etc.)
+class IntegrationConfigUpdate(BaseModel):
+    config: dict
+
+@app.put("/integrations/{integration_type}/config")
+async def update_integration_config_endpoint(integration_type: str, req: IntegrationConfigUpdate):
+    """Met à jour la config d'une intégration sans changer les credentials."""
+    from integrations.manager import update_integration_config
+    try:
+        integration = update_integration_config(integration_type, req.config)
+        return {"status": "success", "integration": integration}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Création manuelle de ticket depuis un incident
 class ManualTicketRequest(BaseModel):
     integration_type: str

@@ -1,0 +1,33 @@
+# Traefik - reverse proxy partagé entre jamono.io et gobering.com
+# Déployé UNE SEULE FOIS manuellement sur le VPS dans /opt/traefik/
+# NON déployé par le pipeline CI/CD de jamono-sre
+
+services:
+  traefik:
+    image: traefik:v3.2
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/traefik.yml:ro
+      - traefik-certs:/etc/traefik/acme
+    networks:
+      - traefik-net
+    labels:
+      - "traefik.enable=true"
+      # Dashboard (optionnel, protégé par IP ou désactivable)
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.jamono.io`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+
+volumes:
+  traefik-certs:
+
+networks:
+  traefik-net:
+    external: true
+    name: traefik-net

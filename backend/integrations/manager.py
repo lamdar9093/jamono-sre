@@ -116,6 +116,28 @@ def delete_integration(integration_type: str):
         db.close()
 
 
+def update_integration_config(integration_type: str, new_config: dict) -> dict:
+    """
+    Met à jour la config d'une intégration (projet Jira, canal Slack, etc.)
+    sans toucher aux credentials de base (base_url, email, api_token).
+    Merge les nouvelles valeurs dans la config existante.
+    """
+    db = SessionLocal()
+    try:
+        row = db.query(Integration).filter(Integration.type == integration_type).first()
+        if not row:
+            raise ValueError(f"Intégration '{integration_type}' non trouvée")
+        
+        existing = json.loads(row.config_json) if row.config_json else {}
+        existing.update(new_config)
+        row.config_json = json.dumps(existing)
+        db.commit()
+        db.refresh(row)
+        return row.to_dict()
+    finally:
+        db.close()
+
+
 def test_integration(integration_type: str, credentials: dict) -> dict:
     """Test de connexion sans sauvegarder."""
     provider = IntegrationRegistry.get(integration_type)

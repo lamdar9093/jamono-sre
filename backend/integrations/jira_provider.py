@@ -296,3 +296,55 @@ class JiraProvider(IntegrationProvider):
 
         except Exception as e:
             return IntegrationAction(success=False, message=str(e))
+
+    def discover_resources(self, resource_type: str, credentials: dict, **kwargs) -> list[dict]:
+        """
+        Découvre les ressources Jira :
+        - "projects" → liste des projets accessibles
+        - "issue_types" → types de tickets pour un projet donné (project_key requis)
+        - "priorities" → priorités configurées dans l'instance
+        """
+        try:
+            base = self._get_base(credentials)
+            auth = self._get_auth(credentials)
+
+            if resource_type == "projects":
+                resp = requests.get(f"{base}/rest/api/3/project", auth=auth, timeout=10)
+                if resp.status_code == 200:
+                    return [
+                        {"id": p["id"], "key": p["key"], "name": p["name"],
+                         "avatar": p.get("avatarUrls", {}).get("24x24", "")}
+                        for p in resp.json()
+                    ]
+
+            elif resource_type == "issue_types":
+                project_key = kwargs.get("project_key", "")
+                if not project_key:
+                    return []
+                resp = requests.get(
+                    f"{base}/rest/api/3/project/{project_key}",
+                    auth=auth, timeout=10,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return [
+                        {"id": it["id"], "name": it["name"],
+                         "subtask": it.get("subtask", False),
+                         "icon": it.get("iconUrl", "")}
+                        for it in data.get("issueTypes", [])
+                        if not it.get("subtask", False)
+                    ]
+
+            elif resource_type == "priorities":
+                resp = requests.get(f"{base}/rest/api/3/priority", auth=auth, timeout=10)
+                if resp.status_code == 200:
+                    return [
+                        {"id": p["id"], "name": p["name"],
+                         "icon": p.get("iconUrl", "")}
+                        for p in resp.json()
+                    ]
+
+            return []
+        except Exception as e:
+            print(f"❌ [JIRA] discover_resources({resource_type}): {e}")
+            return []

@@ -45,10 +45,12 @@ jobs:
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > backend/.env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> backend/.env
             
+            # S'assurer que le réseau Traefik existe (idempotent)
+            docker network create traefik-net 2>/dev/null || true
+
             # Build et restart
             docker compose -f docker-compose.prod.yml build --no-cache
             docker compose -f docker-compose.prod.yml up -d
-            docker compose -f docker-compose.prod.yml restart nginx
             docker image prune -f
             
             echo "✅ Déploiement terminé"

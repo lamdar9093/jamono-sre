@@ -147,6 +147,15 @@ class IntegrationProvider(ABC):
         """
         return IntegrationAction(success=False, message="Webhooks non supportés pour cette intégration")
 
+    def discover_resources(self, resource_type: str, credentials: dict, **kwargs) -> list[dict]:
+        """
+        Découvre les ressources disponibles dans le système externe.
+        Ex: lister les projets Jira, les canaux Slack, les boards ServiceNow.
+        resource_type: "projects", "issue_types", "channels", "priorities", etc.
+        Retourne une liste de {"id": ..., "name": ..., ...}
+        """
+        return []
+
     def test_connection(self, credentials: dict) -> dict:
         """
         Test de connexion avec détails — utilisé par l'UI.

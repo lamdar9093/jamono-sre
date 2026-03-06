@@ -83,7 +83,7 @@ const navItems = [
         )
       },
       {
-        path: "/connectors", label: "Connecteurs",
+        path: "/integrations", label: "Intégrations",
         icon: (
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
             <path d="M6.5 9.5a3.5 3.5 0 005.3.4l2-2a3.5 3.5 0 00-5-5l-1.2 1.2"/>

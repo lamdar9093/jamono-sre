@@ -6,6 +6,7 @@ from integrations.manager import (
     disconnect_integration,
     delete_integration,
     test_integration,
+    update_integration_config,
     dispatch_incident_created,
     dispatch_incident_updated,
     create_ticket_manual,

@@ -9,6 +9,7 @@ import Settings from "./pages/Settings";
 import Team from "./pages/Team";
 import Clusters from "./pages/Clusters";
 import CopilotDrawer from "./components/CopilotDrawer";
+import Integrations from "./pages/Integrations";
 
 function AppContent() {
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -42,6 +43,7 @@ function AppContent() {
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/team" element={<Team />} />
+            <Route path="/integrations" element={<Integrations />} />
           </Routes>
         </main>
 

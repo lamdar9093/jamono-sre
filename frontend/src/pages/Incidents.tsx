@@ -201,7 +201,7 @@ export default function Incidents() {
       {/* Table */}
       <div style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: "var(--r)", overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "40px 80px 1fr 75px 95px 80px 55px", padding: "8px 16px", gap: 10, borderBottom: "1px solid var(--b1)" }}>
-          {["#", "Sévérité", "Titre", "Canal", "Statut", "Assigné", "Âge"].map(h => (
+          {["#", "Sévérité", "Titre", "Slack", "Statut", "Assigné", "Âge"].map(h => (
             <span key={h} style={{ fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>{h}</span>
           ))}
         </div>
@@ -403,16 +403,16 @@ function ActionBtn({ label, color, onClick }: { label: string; color: string; on
 }
 
 function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [form, setForm] = useState({ title: "", description: "", severity: "medium", environment: "prod", linked_pod: "", assigned_to: "" });
+  const [form, setForm] = useState({ title: "", summary: "", severity: "medium" });
   const [saving, setSaving] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [activeIntegrations, setActiveIntegrations] = useState<{ type: string; display_name: string; category: string }[]>([]);
   const [actions, setActions] = useState<Record<string, boolean>>({});
+  const [showMore, setShowMore] = useState(false);
 
   const errors: Record<string, string> = {};
-  if (touched.title && !form.title.trim()) errors.title = "Le titre est requis";
+  if (touched.title && !form.title.trim()) errors.title = "Décrivez ce qui se passe";
 
-  // Fetch active integrations on mount
   useEffect(() => {
     axios.get(`${API_URL}/integrations`).then(r => {
       const active = (r.data.integrations ?? []).filter((i: any) => i.is_active);
@@ -420,26 +420,20 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
     }).catch(() => {});
   }, []);
 
-  // Smart defaults — update toggles when severity/env changes
+  // Smart defaults based on severity
   useEffect(() => {
     const defaults: Record<string, boolean> = {};
     const sev = form.severity;
-    const env = form.environment;
-
     activeIntegrations.forEach(i => {
       if (i.category === "ticketing") {
-        defaults[i.type] = (sev === "critical" || sev === "high") && env === "prod";
+        defaults[i.type] = sev === "critical" || sev === "high";
       } else if (i.category === "communication") {
-        defaults[i.type] = !(sev === "low" && env === "dev");
-      } else {
-        defaults[i.type] = false;
+        defaults[i.type] = sev !== "low";
       }
     });
-
-    defaults["slack"] = (sev === "critical" || sev === "high") && env === "prod";
-
+    defaults["slack"] = sev === "critical" || sev === "high";
     setActions(defaults);
-  }, [form.severity, form.environment, activeIntegrations]);
+  }, [form.severity, activeIntegrations]);
 
   const toggleAction = (key: string) => setActions(p => ({ ...p, [key]: !p[key] }));
 
@@ -450,16 +444,24 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
     try {
       const selectedActions = Object.entries(actions).filter(([_, v]) => v).map(([k]) => k);
       await axios.post(`${API_URL}/incidents`, {
-        ...form,
+        title: form.title,
+        description: form.summary || null,
+        severity: form.severity,
         source: "manual",
-        linked_pod: form.linked_pod || null,
-        assigned_to: form.assigned_to || null,
+        environment: "prod",
         actions: selectedActions.length > 0 ? selectedActions : null,
       });
       onCreated();
     } catch (e) { console.error(e); }
     finally { setSaving(false); }
   };
+
+  const SEV = [
+    { key: "critical", label: "Critical", color: "#EF4444", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", emoji: "🔴" },
+    { key: "high", label: "High", color: "#F97316", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.2)", emoji: "🟠" },
+    { key: "medium", label: "Medium", color: "#EAB308", bg: "rgba(234,179,8,0.08)", border: "rgba(234,179,8,0.2)", emoji: "🟡" },
+    { key: "low", label: "Low", color: "#34D399", bg: "rgba(52,211,153,0.08)", border: "rgba(52,211,153,0.2)", emoji: "🟢" },
+  ];
 
   const ACTION_STYLE: Record<string, { fg: string; bg: string; border: string; label: string; icon: string }> = {
     slack: { fg: "var(--slack)", bg: "var(--slack-a)", border: "rgba(224,30,90,0.15)", label: "Canal Slack", icon: "SLK" },
@@ -468,37 +470,86 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
     servicenow: { fg: "#008537", bg: "rgba(0,133,55,0.08)", border: "rgba(0,133,55,0.15)", label: "Ticket ServiceNow", icon: "SNW" },
   };
 
+  const activeActions = Object.entries(actions).filter(([_, v]) => v);
+  const currentSev = SEV.find(s => s.key === form.severity) || SEV[2];
+
   return (
-    <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <FormField label="Titre" required error={errors.title}>
-        <input type="text" value={form.title} placeholder="Ex: API gateway timeout en prod" onChange={e => setForm(p => ({ ...p, title: e.target.value }))} onBlur={() => setTouched(p => ({ ...p, title: true }))} style={{ ...formInput, borderColor: errors.title ? "var(--re)" : undefined }} />
-      </FormField>
-      <FormField label="Description">
-        <textarea value={form.description} rows={3} placeholder="Décris le problème..." onChange={e => setForm(p => ({ ...p, description: e.target.value }))} style={{ ...formInput, resize: "none", fontFamily: "var(--fm)" }} />
-      </FormField>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <FormField label="Sévérité">
-          <select value={form.severity} onChange={e => setForm(p => ({ ...p, severity: e.target.value }))} style={formInput}>
-            <option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
-          </select>
-        </FormField>
-        <FormField label="Environnement">
-          <select value={form.environment} onChange={e => setForm(p => ({ ...p, environment: e.target.value }))} style={formInput}>
-            <option value="prod">prod</option><option value="staging">staging</option><option value="dev">dev</option>
-          </select>
-        </FormField>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <FormField label="Pod / Service lié"><input type="text" value={form.linked_pod} placeholder="gateway-pod ou service-api" onChange={e => setForm(p => ({ ...p, linked_pod: e.target.value }))} style={formInput} /></FormField>
-        <FormField label="Assigné à"><input type="text" value={form.assigned_to} placeholder="@username" onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} style={formInput} /></FormField>
+    <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* ── What's going on? ── */}
+      <div>
+        <label style={{ fontFamily: "var(--fm)", fontSize: 13, fontWeight: 600, color: "var(--t1)", display: "block", marginBottom: 8 }}>
+          Que se passe-t-il ?
+        </label>
+        <input
+          type="text"
+          value={form.title}
+          placeholder="Ex: Le paiement ne fonctionne plus"
+          autoFocus
+          onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+          onBlur={() => setTouched(p => ({ ...p, title: true }))}
+          style={{
+            ...formInput,
+            fontSize: 14, padding: "12px 14px", fontWeight: 500,
+            borderColor: errors.title ? "var(--re)" : undefined,
+          }}
+        />
+        {errors.title && <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--re)", marginTop: 4 }}>{errors.title}</p>}
       </div>
 
-      {/* ── Actions à déclencher ── */}
+      {/* ── Summary (optional) ── */}
       <div>
-        <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8, fontWeight: 600 }}>
-          Actions à déclencher
+        <label style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          Résumé <span style={{ fontSize: 9, opacity: 0.5 }}>optionnel</span>
+        </label>
+        <textarea
+          value={form.summary}
+          rows={2}
+          placeholder="Plus de détails sur la situation..."
+          onChange={e => setForm(p => ({ ...p, summary: e.target.value }))}
+          style={{ ...formInput, resize: "none", fontFamily: "var(--fm)", fontSize: 12 }}
+        />
+      </div>
+
+      {/* ── Severity ── */}
+      <div>
+        <label style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", display: "block", marginBottom: 8 }}>
+          Sévérité
+        </label>
+        <div style={{ display: "flex", gap: 6 }}>
+          {SEV.map(s => (
+            <button key={s.key} onClick={() => setForm(p => ({ ...p, severity: s.key }))} style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+              padding: "9px 6px", borderRadius: 8, cursor: "pointer",
+              border: form.severity === s.key ? `1.5px solid ${s.color}` : "1.5px solid var(--b1)",
+              background: form.severity === s.key ? s.bg : "transparent",
+              transition: "all 0.15s",
+            }}
+              onMouseEnter={e => { if (form.severity !== s.key) (e.currentTarget as HTMLElement).style.borderColor = s.border; }}
+              onMouseLeave={e => { if (form.severity !== s.key) (e.currentTarget as HTMLElement).style.borderColor = "var(--b1)"; }}
+            >
+              <span style={{ fontSize: 10 }}>{s.emoji}</span>
+              <span style={{
+                fontFamily: "var(--fm)", fontSize: 11, fontWeight: form.severity === s.key ? 700 : 400,
+                color: form.severity === s.key ? s.color : "var(--t3)",
+                transition: "all 0.15s",
+              }}>{s.label}</span>
+            </button>
+          ))}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      </div>
+
+      {/* ── Actions — auto-detected from integrations ── */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <label style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>
+            Actions automatiques
+          </label>
+          <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: currentSev.color, fontWeight: 600 }}>
+            {activeActions.length} action{activeActions.length !== 1 ? "s" : ""} sélectionnée{activeActions.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <ActionToggle
             label="Canal Slack"
             icon="SLK"
@@ -525,12 +576,55 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
             );
           })}
         </div>
-        <p style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginTop: 6, fontStyle: "italic" }}>
-          Pré-sélection basée sur la sévérité et l'environnement
-        </p>
       </div>
 
-      <FormActions onCancel={onClose} onSubmit={submit} submitLabel={saving ? "Création..." : "Déclarer"} submitting={saving} disabled={!form.title.trim()} />
+      {/* ── More options (expandable) ── */}
+      <button onClick={() => setShowMore(!showMore)} style={{
+        display: "flex", alignItems: "center", gap: 6,
+        background: "none", border: "none", cursor: "pointer",
+        fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)",
+        padding: 0, transition: "color 0.12s",
+      }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; }}
+      >
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+          style={{ transform: showMore ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+          <path d="M6 4l4 4-4 4"/>
+        </svg>
+        Options supplémentaires
+      </button>
+      {showMore && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingLeft: 16, borderLeft: "2px solid var(--b1)" }}>
+          <FormField label="Environnement">
+            <select value="prod" onChange={() => {}} style={formInput}>
+              <option value="prod">Production</option><option value="staging">Staging</option><option value="dev">Dev</option>
+            </select>
+          </FormField>
+          <FormField label="Assigné à">
+            <input type="text" placeholder="Rechercher un membre..." style={formInput} />
+          </FormField>
+        </div>
+      )}
+
+      {/* ── Submit ── */}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+        <button onClick={onClose} style={{
+          padding: "10px 20px", borderRadius: 8, fontFamily: "var(--fm)", fontSize: 12.5, fontWeight: 500,
+          cursor: "pointer", border: "1px solid var(--b2)", background: "transparent", color: "var(--t2)",
+        }}>Annuler</button>
+        <button onClick={submit} disabled={saving || !form.title.trim()} style={{
+          padding: "10px 28px", borderRadius: 8, fontFamily: "var(--f)", fontSize: 13, fontWeight: 700,
+          cursor: (saving || !form.title.trim()) ? "not-allowed" : "pointer",
+          border: "none", color: "#fff",
+          background: `linear-gradient(135deg, ${currentSev.color}, ${currentSev.color}cc)`,
+          opacity: (saving || !form.title.trim()) ? 0.5 : 1,
+          boxShadow: `0 2px 8px ${currentSev.color}30`,
+          transition: "all 0.15s",
+        }}>
+          {saving ? "Déclaration..." : "Déclarer l'incident"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -541,10 +635,10 @@ function ActionToggle({ label, icon, fg, bg, border, checked, onChange }: {
   return (
     <button onClick={onChange} style={{
       display: "flex", alignItems: "center", gap: 10,
-      padding: "8px 12px", borderRadius: "var(--r)",
+      padding: "8px 12px", borderRadius: 8,
       background: checked ? bg : "transparent",
-      border: `1px solid ${checked ? border : "var(--b2)"}`,
-      cursor: "pointer", transition: "all 0.12s", width: "100%",
+      border: `1px solid ${checked ? border : "var(--b1)"}`,
+      cursor: "pointer", transition: "all 0.15s", width: "100%",
     }}>
       <div style={{
         width: 22, height: 22, borderRadius: 6,
@@ -553,23 +647,24 @@ function ActionToggle({ label, icon, fg, bg, border, checked, onChange }: {
         display: "grid", placeItems: "center",
         fontFamily: "var(--fm)", fontSize: 7, fontWeight: 700,
         color: checked ? fg : "var(--t3)",
-        transition: "all 0.12s",
+        transition: "all 0.15s",
       }}>{icon}</div>
       <span style={{
-        fontFamily: "var(--fm)", fontSize: 11, fontWeight: 500,
+        fontFamily: "var(--fm)", fontSize: 11.5, fontWeight: 500,
         color: checked ? fg : "var(--t3)",
-        flex: 1, textAlign: "left", transition: "color 0.12s",
+        flex: 1, textAlign: "left", transition: "color 0.15s",
       }}>{label}</span>
       <div style={{
-        width: 32, height: 18, borderRadius: 9,
+        width: 34, height: 18, borderRadius: 9,
         background: checked ? fg : "var(--s3)",
         position: "relative", transition: "background 0.15s",
       }}>
         <div style={{
-          width: 12, height: 12, borderRadius: "50%", background: "#fff",
-          position: "absolute", top: 3,
-          left: checked ? 17 : 3,
+          width: 13, height: 13, borderRadius: "50%", background: "#fff",
+          position: "absolute", top: 2.5,
+          left: checked ? 18 : 3,
           transition: "left 0.15s",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
         }} />
       </div>
     </button>

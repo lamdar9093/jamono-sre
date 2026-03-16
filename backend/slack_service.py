@@ -3,11 +3,29 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from settings import get_setting
 
+_bot_user_id: str | None = None
+
 def get_slack_client():
     token = get_setting("slack_bot_token")
     if not token:
         return None
     return WebClient(token=token)
+
+def get_bot_user_id() -> str | None:
+    """Retourne le User ID du bot (U...) via auth.test, mis en cache."""
+    global _bot_user_id
+    if _bot_user_id:
+        return _bot_user_id
+    client = get_slack_client()
+    if not client:
+        return None
+    try:
+        res = client.auth_test()
+        _bot_user_id = res["user_id"]
+        print(f"[SLACK] Bot user_id mis en cache : {_bot_user_id}")
+    except Exception as e:
+        print(f"❌ [SLACK] auth.test échoué : {e}")
+    return _bot_user_id
 
 def is_slack_enabled() -> bool:
     return str(get_setting("slack_enabled")).lower() == "true" and bool(get_setting("slack_bot_token"))
@@ -19,9 +37,11 @@ def create_incident_channel(incident_id: int, component: str) -> str | None:
     if str(get_setting("slack_create_channel_per_incident")).lower() != "true":
         return None
 
+    import re
     client = get_slack_client()
-    # Nom du canal : incident-42-crash-app2 (sans caractères spéciaux)
-    clean_component = component.replace("_", "-").replace(".", "-").lower()
+    # Nom du canal : incident-42-crash-app2 (uniquement lettres, chiffres, tirets)
+    clean_component = re.sub(r'[^a-z0-9-]', '-', component.lower())
+    clean_component = re.sub(r'-+', '-', clean_component).strip('-')
     channel_name = f"incident-{incident_id}-{clean_component}"[:80]
 
     try:
@@ -184,13 +204,18 @@ async def handle_slack_event(body: dict):
     """Traite les événements Slack — mentions du bot et messages dans les canaux d'incident."""
     event = body.get("event", {})
     event_type = event.get("type")
-    print(f"[SLACK DEBUG] type={event_type} bot_id={event.get('bot_id')} subtype={event.get('subtype')} text={event.get('text','')[:80]}")
+    bot_uid = get_bot_user_id()
+    print(f"[SLACK DEBUG] type={event_type} bot_id={event.get('bot_id')} subtype={event.get('subtype')} user={event.get('user')} bot_uid={bot_uid} text={event.get('text','')[:80]}")
 
-    # Ignorer les messages du bot lui-même
+    # Ignorer les messages du bot lui-même et les messages système (join/leave/etc.)
     if event.get("bot_id"):
         return
+    if event.get("subtype"):
+        return
+    if bot_uid and event.get("user") == bot_uid:
+        return
 
-    if event_type in ("app_mention", "message") and event.get("text") and "<@" in event.get("text", ""):
+    if event_type == "app_mention" and event.get("text") and "<@" in event.get("text", ""):
         try:
             await handle_mention(event)
         except Exception as e:

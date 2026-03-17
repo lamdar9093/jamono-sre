@@ -1,71 +1,82 @@
 /* ═══════════════════════════════════════════
-   JAMONO — Design System v3
-   Palette: Slate-Navy (cool, easy on eyes)
+   JAMONO — Design System v4
+   Palette: Light mode — Pampas + Terra Cotta
+   Sidebar: Anthracite (#1A1A19)
    ═══════════════════════════════════════════ */
 
 :root {
-  /* ── Backgrounds (cool slate, NOT warm brown) ── */
-  --bg:    #0B0E14;      /* Main background */
-  --s1:    #111620;      /* Surface 1 — sidebar, cards */
-  --s2:    #161B27;      /* Surface 2 — inputs, elevated */
-  --s3:    #1C2235;      /* Surface 3 — hover states */
+  /* ── Backgrounds ── */
+  --bg:    #F5F4F0;      /* Main background — pampas */
+  --s1:    #FFFFFF;       /* Surface 1 — cards, panels */
+  --s2:    #EFEDE7;       /* Surface 2 — inputs, was #F0EFEB */
+  --s3:    #E8E6DF;       /* Surface 3 — hover states */
+
+  /* ── Sidebar ── */
+  --sidebar:  #1A1A19;    /* Sidebar background */
+  --sidebar2: #242423;    /* Sidebar hover */
+  --sidebar3: #2E2E2D;    /* Sidebar active */
 
   /* ── Borders ── */
-  --b1:    #1E2536;      /* Primary border */
-  --b2:    #252D3F;      /* Secondary border */
-  --b3:    #2E3850;      /* Tertiary / hover border */
+  --b1:    #E8E6DF;       /* Primary border */
+  --b2:    #D9D7CF;       /* Secondary border */
+  --b3:    #C8C5BC;       /* Tertiary / hover border */
 
   /* ── Text ── */
-  --t1:    #E8ECF4;      /* Primary text */
-  --t2:    #8B95A9;      /* Secondary text */
-  --t3:    #5A6478;      /* Muted text */
+  --t1:    #141413;       /* Primary text — anthracite */
+  --t2:    #4A4A47;       /* Secondary text — was #6B6A65, darker now */
+  --t3:    #7A7974;       /* Muted text — was #9C9B95, darker now */
 
-  /* ── Brand — Blue (trust, stability, tech) ── */
-  --brand:   #3B82F6;
-  --brand2:  #60A5FA;     /* Lighter brand */
-  --brand-a: rgba(59,130,246,0.12);
-  --brand-b: rgba(59,130,246,0.25);
+  /* ── Sidebar text ── */
+  --st1:   #FFFFFF;                  /* Sidebar primary text */
+  --st2:   rgba(255,255,255,0.55);   /* Sidebar secondary */
+  --st3:   rgba(255,255,255,0.30);   /* Sidebar muted */
 
-  /* ── Legacy aliases (so existing components don't break) ── */
-  --jam:   #3B82F6;       /* Was orange, now brand blue */
-  --jam2:  #60A5FA;       /* Was light orange, now light blue */
-  --jam-a: rgba(59,130,246,0.12);
-  --jam-b: rgba(59,130,246,0.25);
+  /* ── Brand — Terra Cotta ── */
+  --brand:   #C15F3C;
+  --brand2:  #DA7756;     /* Lighter brand */
+  --brand-a: rgba(193,95,60,0.08);
+  --brand-b: rgba(193,95,60,0.20);
+
+  /* ── Legacy aliases ── */
+  --jam:   #C15F3C;
+  --jam2:  #DA7756;
+  --jam-a: rgba(193,95,60,0.08);
+  --jam-b: rgba(193,95,60,0.20);
 
   /* ── Semantic colors ── */
-  --g:     #34D399;       /* Success / healthy */
-  --g-a:   rgba(52,211,153,0.10);
-  --am:    #FBBF24;       /* Warning / amber */
-  --am-a:  rgba(251,191,36,0.10);
-  --re:    #F87171;       /* Error / danger */
-  --re-a:  rgba(248,113,113,0.10);
-  --bl:    #60A5FA;       /* Info / blue */
-  --bl-a:  rgba(96,165,250,0.10);
+  --g:     #2D8B5F;       /* Success / healthy */
+  --g-a:   rgba(45,139,95,0.08);
+  --am:    #B87514;       /* Warning / amber */
+  --am-a:  rgba(184,117,20,0.08);
+  --re:    #C13434;       /* Error / danger */
+  --re-a:  rgba(193,52,52,0.08);
+  --bl:    #2563EB;       /* Info / blue */
+  --bl-a:  rgba(37,99,235,0.08);
 
   /* ── Severity ── */
-  --sev-critical:     #EF4444;
-  --sev-critical-a:   rgba(239,68,68,0.12);
-  --sev-high:         #F97316;
-  --sev-high-a:       rgba(249,115,22,0.12);
-  --sev-medium:       #FBBF24;
-  --sev-medium-a:     rgba(251,191,36,0.12);
-  --sev-low:          #60A5FA;
-  --sev-low-a:        rgba(96,165,250,0.12);
+  --sev-critical:     #C13434;
+  --sev-critical-a:   rgba(193,52,52,0.08);
+  --sev-high:         #D85A30;
+  --sev-high-a:       rgba(216,90,48,0.08);
+  --sev-medium:       #B87514;
+  --sev-medium-a:     rgba(184,117,20,0.08);
+  --sev-low:          #2D8B5F;
+  --sev-low-a:        rgba(45,139,95,0.08);
 
   /* ── Cloud providers ── */
   --aws:     #FF9900;
   --azure:   #0078D4;
   --gcp:     #4285F4;
   --rancher: #0075A8;
-  --k3s:     #FFC61C;
+  --k3s:     #C19A00;
 
   /* ── Integrations ── */
   --slack:   #E01E5A;
-  --slack-a: rgba(224,30,90,0.10);
+  --slack-a: rgba(224,30,90,0.08);
 
   /* ── Extras ── */
-  --purple:   #A78BFA;
-  --purple-a: rgba(167,139,250,0.12);
+  --purple:   #7C3AED;
+  --purple-a: rgba(124,58,237,0.08);
 
   /* ── Typography ── */
   --f:     'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -98,11 +109,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--b2);
+  background: var(--b3);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--b3);
+  background: var(--b2);
 }
 
 /* ── Animations ── */

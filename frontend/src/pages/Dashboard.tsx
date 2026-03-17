@@ -102,7 +102,7 @@ export default function Dashboard() {
               border: "none",
               background: "var(--brand)",
               color: "#fff",
-              boxShadow: "0 2px 10px rgba(59,130,246,0.3)",
+              boxShadow: "0 2px 8px rgba(193,95,60,0.25)",
               opacity: loading ? 0.7 : 1,
               transition: "all 0.15s",
             }}

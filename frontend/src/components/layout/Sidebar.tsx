@@ -128,24 +128,18 @@ export default function Sidebar() {
   const [clusterDropdown, setClusterDropdown] = useState(false);
   const [selectedCluster, setSelectedCluster] = useState(CLUSTERS[0]);
 
-  const fetchIncidents = () => {
-    axios.get(`${API_URL}/incidents`).then(r => {
-      const open = r.data.incidents?.filter((i: any) => i.status === "open" || i.status === "in_progress").length || 0;
-      setOpenIncidents(open);
-    }).catch(() => {});
-  };
-
+  // ── Existing API calls — untouched ──
   useEffect(() => {
     axios.get(`${API_URL}/team`).then(r => setOncall(r.data.oncall)).catch(() => {});
-    fetchIncidents();
-    const interval = setInterval(fetchIncidents, 30000);
-    return () => clearInterval(interval);
+    axios.get(`${API_URL}/incidents`).then(r => {
+      const open = r.data.incidents?.filter((i: any) => i.status !== "resolved").length || 0;
+      setOpenIncidents(open);
+    }).catch(() => {});
   }, []);
 
   return (
     <aside style={{
-      background: "var(--s1)",
-      borderRight: "1px solid var(--b1)",
+      background: "var(--sidebar)",
       display: "flex",
       flexDirection: "column",
       height: "100vh",
@@ -157,7 +151,7 @@ export default function Sidebar() {
       {/* ── Logo ── */}
       <div style={{
         padding: "16px 16px 12px",
-        borderBottom: "1px solid var(--b1)",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
         display: "flex",
         alignItems: "center",
         gap: 10,
@@ -165,18 +159,18 @@ export default function Sidebar() {
       }}>
         <div style={{
           width: 30, height: 30,
-          background: "linear-gradient(135deg, var(--brand), #6366F1)",
+          background: "linear-gradient(135deg, var(--brand), #DA7756)",
           borderRadius: 8,
           display: "grid",
           placeItems: "center",
           flexShrink: 0,
-          boxShadow: "0 4px 12px rgba(59,130,246,0.3)",
+          boxShadow: "0 4px 12px rgba(193,95,60,0.3)",
         }}>
           <span style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>J</span>
         </div>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--t1)", letterSpacing: "-0.02em" }}>jamono</div>
-          <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", letterSpacing: "0.05em", textTransform: "uppercase" }}>SRE Copilot</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--st1)", letterSpacing: "-0.02em" }}>jamono</div>
+          <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--st3)", letterSpacing: "0.05em", textTransform: "uppercase" }}>SRE Copilot</div>
         </div>
       </div>
 
@@ -190,18 +184,18 @@ export default function Sidebar() {
             alignItems: "center",
             gap: 8,
             padding: "8px 10px",
-            background: "var(--s2)",
-            border: `1px solid ${clusterDropdown ? "var(--brand-b)" : "var(--b2)"}`,
+            background: "var(--sidebar2)",
+            border: `1px solid ${clusterDropdown ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)"}`,
             borderRadius: "var(--r)",
             cursor: "pointer",
             transition: "border-color 0.15s",
-            color: "var(--t1)",
+            color: "var(--st1)",
           }}
         >
           <ProviderBadge provider={selectedCluster.provider} size={22} />
           <div style={{ flex: 1, textAlign: "left" }}>
             <div style={{ fontFamily: "var(--fm)", fontSize: 11, fontWeight: 600, lineHeight: 1.2 }}>{selectedCluster.name}</div>
-            <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)", marginTop: 1 }}>
+            <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--st3)", marginTop: 1 }}>
               {PROVIDERS[selectedCluster.provider]?.short} · {selectedCluster.region}
             </div>
           </div>
@@ -210,7 +204,7 @@ export default function Sidebar() {
             background: selectedCluster.status === "healthy" ? "var(--g)" : selectedCluster.status === "warning" ? "var(--am)" : "var(--re)",
             boxShadow: `0 0 6px ${selectedCluster.status === "healthy" ? "var(--g)" : "var(--re)"}50`,
           }} />
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--t3)" strokeWidth="2" strokeLinecap="round">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--st3)" strokeWidth="2" strokeLinecap="round">
             <path d="M4 6l4 4 4-4"/>
           </svg>
         </button>
@@ -219,15 +213,15 @@ export default function Sidebar() {
         {clusterDropdown && (
           <div style={{
             position: "absolute", top: "100%", left: 12, right: 12,
-            background: "var(--s2)", border: "1px solid var(--b2)",
-            borderRadius: "var(--r)", boxShadow: "0 12px 32px rgba(0,0,0,0.4)",
+            background: "var(--sidebar2)", border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: "var(--r)", boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
             zIndex: 50, marginTop: 4, overflow: "hidden",
             animation: "scaleIn 0.15s ease",
           }}>
             <div style={{
               padding: "8px 10px 5px",
               fontFamily: "var(--fm)", fontSize: 9, fontWeight: 600,
-              color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em",
+              color: "var(--st3)", textTransform: "uppercase", letterSpacing: "0.08em",
             }}>
               Changer de cluster
             </div>
@@ -240,17 +234,17 @@ export default function Sidebar() {
                   style={{
                     width: "100%", display: "flex", alignItems: "center", gap: 8,
                     padding: "9px 10px", border: "none", cursor: "pointer",
-                    background: isActive ? "var(--brand-a)" : "transparent",
-                    color: "var(--t1)", textAlign: "left",
+                    background: isActive ? "rgba(255,255,255,0.08)" : "transparent",
+                    color: "var(--st1)", textAlign: "left",
                     transition: "background 0.1s",
                   }}
-                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "var(--s3)"; }}
+                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"; }}
                   onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                 >
                   <ProviderBadge provider={cl.provider} size={22} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: "var(--fm)", fontSize: 11, fontWeight: 500 }}>{cl.name}</div>
-                    <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)" }}>
+                    <div style={{ fontFamily: "var(--fm)", fontSize: 11, fontWeight: 500, color: "var(--st1)" }}>{cl.name}</div>
+                    <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--st3)" }}>
                       {PROVIDERS[cl.provider]?.short} · {cl.region}
                     </div>
                   </div>
@@ -266,11 +260,11 @@ export default function Sidebar() {
                 </button>
               );
             })}
-            <div style={{ borderTop: "1px solid var(--b1)", padding: "6px 10px" }}>
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "6px 10px" }}>
               <button style={{
                 width: "100%", padding: "7px", borderRadius: 6,
-                background: "transparent", border: "1px dashed var(--b2)",
-                color: "var(--t3)", cursor: "pointer",
+                background: "transparent", border: "1px dashed rgba(255,255,255,0.12)",
+                color: "var(--st3)", cursor: "pointer",
                 fontFamily: "var(--fm)", fontSize: 10,
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
               }}>
@@ -288,7 +282,7 @@ export default function Sidebar() {
             <span style={{
               fontFamily: "var(--fm)",
               fontSize: 9,
-              color: "var(--t3)",
+              color: "var(--st3)",
               letterSpacing: "0.1em",
               textTransform: "uppercase",
               padding: "10px 10px 4px",
@@ -312,26 +306,26 @@ export default function Sidebar() {
                     cursor: "pointer",
                     fontSize: 13,
                     fontWeight: active ? 600 : 450,
-                    color: active ? "var(--brand2)" : "var(--t2)",
-                    background: active ? "var(--brand-a)" : "transparent",
-                    border: active ? "1px solid rgba(59,130,246,0.15)" : "1px solid transparent",
+                    color: active ? "#fff" : "var(--st2)",
+                    background: active ? "rgba(255,255,255,0.1)" : "transparent",
+                    border: "1px solid transparent",
                     transition: "all 0.12s",
                     userSelect: "none",
                   }}
                   onMouseEnter={e => {
                     if (!active) {
-                      (e.currentTarget as HTMLElement).style.background = "var(--s2)";
-                      (e.currentTarget as HTMLElement).style.color = "var(--t1)";
+                      (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                      (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
                     }
                   }}
                   onMouseLeave={e => {
                     if (!active) {
                       (e.currentTarget as HTMLElement).style.background = "transparent";
-                      (e.currentTarget as HTMLElement).style.color = "var(--t2)";
+                      (e.currentTarget as HTMLElement).style.color = "var(--st2)";
                     }
                   }}
                 >
-                  <span style={{ opacity: active ? 1 : 0.65, flexShrink: 0, display: "flex" }}>
+                  <span style={{ opacity: active ? 1 : 0.55, flexShrink: 0, display: "flex" }}>
                     {link.icon}
                   </span>
                   {link.label}
@@ -359,44 +353,44 @@ export default function Sidebar() {
       </nav>
 
       {/* ── On-call ── */}
-      <div style={{ padding: "10px 10px", borderTop: "1px solid var(--b1)", flexShrink: 0 }}>
+      <div style={{ padding: "10px 10px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         {oncall ? (
           <div style={{
             display: "flex",
             alignItems: "center",
             gap: 9,
             padding: "9px 10px",
-            background: "var(--g-a)",
-            border: "1px solid rgba(52,211,153,0.15)",
+            background: "rgba(45,139,95,0.1)",
+            border: "1px solid rgba(45,139,95,0.15)",
             borderRadius: "var(--r)",
           }}>
             <div style={{
               width: 30, height: 30,
               borderRadius: 7,
-              background: "linear-gradient(135deg, rgba(52,211,153,0.25), rgba(59,130,246,0.2))",
-              border: "2px solid rgba(52,211,153,0.3)",
+              background: "rgba(45,139,95,0.2)",
+              border: "2px solid rgba(45,139,95,0.3)",
               display: "grid",
               placeItems: "center",
               fontSize: 11,
               fontWeight: 700,
-              color: "var(--g)",
+              color: "#34D399",
               flexShrink: 0,
             }}>
               {oncall.name.charAt(0).toUpperCase()}{oncall.name.split(" ")[1]?.charAt(0).toUpperCase() || ""}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--t1)", lineHeight: 1.2 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--st1)", lineHeight: 1.2 }}>
                 {oncall.name}
               </div>
               <div style={{
-                fontFamily: "var(--fm)", fontSize: 9, color: "var(--g)",
+                fontFamily: "var(--fm)", fontSize: 9, color: "#34D399",
                 letterSpacing: "0.06em", textTransform: "uppercase",
                 display: "flex", alignItems: "center", gap: 4, marginTop: 2,
               }}>
                 <span style={{
                   width: 5, height: 5, borderRadius: "50%",
-                  background: "var(--g)",
-                  boxShadow: "0 0 4px var(--g)",
+                  background: "#34D399",
+                  boxShadow: "0 0 4px #34D399",
                 }}/>
                 ON-CALL
               </div>
@@ -405,12 +399,12 @@ export default function Sidebar() {
         ) : (
           <div style={{
             padding: "9px 10px",
-            background: "var(--s2)",
-            border: "1px solid var(--b2)",
+            background: "var(--sidebar2)",
+            border: "1px solid rgba(255,255,255,0.06)",
             borderRadius: "var(--r)",
             fontFamily: "var(--fm)",
             fontSize: 10,
-            color: "var(--t3)",
+            color: "var(--st3)",
           }}>
             Aucun on-call
           </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../config";
 import Modal, { formInput, FormField, FormActions } from "../components/Modal";
@@ -72,12 +73,13 @@ function fmtMttr(s: number) {
 }
 
 export default function Incidents() {
+  const { state } = useLocation();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [stats, setStats] = useState<MttrStats | null>(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterEnv, setFilterEnv] = useState("all");
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(!!(state as any)?.openCreate);
   const [selected, setSelected] = useState<Incident | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
 
@@ -157,10 +159,10 @@ export default function Incidents() {
           <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--t1)", letterSpacing: "-0.02em" }}>Incidents</h1>
           <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", marginTop: 3 }}>{incidents.length} total · {activeIncidents.length} ouverts</p>
         </div>
-        <button onClick={() => setShowCreate(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 16px", borderRadius: "var(--r)", fontFamily: "var(--f)", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "var(--re)", color: "#fff", boxShadow: "0 2px 10px rgba(248,113,113,0.25)" }}>
+        {/* <button onClick={() => setShowCreate(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 16px", borderRadius: "var(--r)", fontFamily: "var(--f)", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "var(--re)", color: "#fff", boxShadow: "0 2px 10px rgba(248,113,113,0.25)" }}>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
           Déclarer un incident
-        </button>
+        </button> */}
       </div>
 
       {/* Stats */}

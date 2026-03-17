@@ -412,6 +412,67 @@ async def manual_scan():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/monitor/triage")
+async def scan_triage(namespace: str = "default"):
+    """Scanne le cluster et retourne un rapport de triage sans créer d'incidents."""
+    try:
+        from tools.k8s_core import list_pods_tool
+        pods = await asyncio.to_thread(list_pods_tool.invoke, {"namespace": namespace})
+        if isinstance(pods, str):
+            return {"status": "degraded", "pods": [], "message": pods}
+
+        # Enrichir chaque pod avec severité estimée
+        report = []
+        for pod in pods:
+            severity = "healthy"
+            if pod["health_status"] == "UNHEALTHY":
+                restarts = pod.get("restarts", 0)
+                if restarts > 100 or "CrashLoopBackOff" in (pod.get("diagnostic") or ""):
+                    severity = "critical"
+                elif restarts > 20:
+                    severity = "high"
+                elif restarts > 5:
+                    severity = "medium"
+                else:
+                    severity = "low"
+
+            # Check if incident already exists for this pod
+            existing = None
+            try:
+                all_incidents = list_incidents()
+                existing = next(
+                    (i for i in all_incidents
+                     if i.get("linked_pod") == pod["pod_name"] and i.get("status") != "resolved"),
+                    None,
+                )
+            except Exception:
+                pass
+
+            report.append({
+                **pod,
+                "severity": severity,
+                "has_incident": existing is not None,
+                "incident_id": existing["id"] if existing else None,
+            })
+
+        # Sort: unhealthy first, then by restarts
+        report.sort(key=lambda p: (
+            0 if p["health_status"] == "UNHEALTHY" else 1,
+            -p.get("restarts", 0),
+        ))
+
+        unhealthy = sum(1 for p in report if p["health_status"] == "UNHEALTHY")
+        return {
+            "status": "success",
+            "namespace": namespace,
+            "total": len(report),
+            "unhealthy": unhealthy,
+            "healthy": len(report) - unhealthy,
+            "pods": report,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ═══════════════════════════════════════════════════
 # TEAM

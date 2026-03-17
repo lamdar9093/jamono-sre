@@ -13,23 +13,23 @@ const routeLabels: Record<string, string> = {
   "/connectors": "connecteurs",
 };
 
-export default function TopBar({ onDeclareIncident }: { onDeclareIncident?: () => void }) {
+export default function TopBar({ onDeclareIncident, onScan }: { onDeclareIncident?: () => void; onScan?: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState<string | null>(null);
 
-  const handleScan = async () => {
-    setScanning(true);
-    try {
-      await axios.post(`${API_URL}/monitor/scan`);
-      setLastScan(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setScanning(false);
-    }
-  };
+  // const handleScan = async () => {
+  //   setScanning(true);
+  //   try {
+  //     await axios.post(`${API_URL}/monitor/scan`);
+  //     setLastScan(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
+  //   } catch (e) {
+  //     console.error(e);
+  //   } finally {
+  //     setScanning(false);
+  //   }
+  // };
 
   const page = routeLabels[location.pathname] || "jamono";
 
@@ -123,7 +123,7 @@ export default function TopBar({ onDeclareIncident }: { onDeclareIncident?: () =
           Déclarer un incident
         </button>
 
-        {/* Scan */}
+        {/* Scan
         <button
           onClick={handleScan}
           disabled={scanning}
@@ -168,7 +168,7 @@ export default function TopBar({ onDeclareIncident }: { onDeclareIncident?: () =
             <path d="M14.5 8l-2.2-2.2M14.5 8l-2.2 2.2"/>
           </svg>
           {scanning ? "Scan..." : "Scan"}
-        </button>
+        </button> */}
 
         {/* Notifications */}
         <button

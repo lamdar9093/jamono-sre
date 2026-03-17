@@ -16,7 +16,7 @@ interface RemediationModal {
   actions: any[];
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onScan }: { onScan?: () => void }) {
   const [pods, setPods] = useState<Pod[]>([]);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState<RemediationModal | null>(null);
@@ -92,7 +92,7 @@ export default function Dashboard() {
             <option value="monitoring">monitoring</option>
           </select>
           <button
-            onClick={fetchPods}
+            onClick={() => { fetchPods(); if (onScan) onScan(); }}
             disabled={loading}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
@@ -345,7 +345,7 @@ export default function Dashboard() {
               textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 12,
             }}>Actions rapides</div>
             {[
-              { l: "Scanner le cluster", color: "var(--brand)", action: fetchPods },
+              { l: "Scanner le cluster", color: "var(--brand)", action: () => { if (onScan) onScan(); } },
               { l: "Voir les incidents", color: "var(--re)", action: () => window.location.href = "/incidents" },
               { l: "Historique", color: "var(--purple)", action: () => window.location.href = "/history" },
             ].map(a => (

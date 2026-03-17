@@ -73,15 +73,22 @@ function fmtMttr(s: number) {
 }
 
 export default function Incidents() {
-  const { state } = useLocation();
+  const location = useLocation();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [stats, setStats] = useState<MttrStats | null>(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterEnv, setFilterEnv] = useState("all");
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(!!(state as any)?.openCreate);
+  const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<Incident | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
+
+  useEffect(() => {
+    if ((location.state as any)?.openCreate) {
+      setShowCreate(true);
+      window.history.replaceState({}, "");
+    }
+  }, [location.state]);
 
   const fetch = async () => {
     setLoading(true);
@@ -159,10 +166,6 @@ export default function Incidents() {
           <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--t1)", letterSpacing: "-0.02em" }}>Incidents</h1>
           <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", marginTop: 3 }}>{incidents.length} total · {activeIncidents.length} ouverts</p>
         </div>
-        {/* <button onClick={() => setShowCreate(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 16px", borderRadius: "var(--r)", fontFamily: "var(--f)", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "var(--re)", color: "#fff", boxShadow: "0 2px 10px rgba(248,113,113,0.25)" }}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
-          Déclarer un incident
-        </button> */}
       </div>
 
       {/* Stats */}
@@ -405,15 +408,13 @@ function ActionBtn({ label, color, onClick }: { label: string; color: string; on
 }
 
 function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [form, setForm] = useState({ title: "", summary: "", severity: "medium" });
+  const [form, setForm] = useState({ title: "", summary: "", severity: "medium", environment: "prod", assigned_to: "" });
   const [saving, setSaving] = useState(false);
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [submitted, setSubmitted] = useState(false);
   const [activeIntegrations, setActiveIntegrations] = useState<{ type: string; display_name: string; category: string }[]>([]);
   const [actions, setActions] = useState<Record<string, boolean>>({});
-  const [showMore, setShowMore] = useState(false);
 
-  const errors: Record<string, string> = {};
-  if (touched.title && !form.title.trim()) errors.title = "Décrivez ce qui se passe";
+  const hasError = submitted && !form.title.trim();
 
   useEffect(() => {
     axios.get(`${API_URL}/integrations`).then(r => {
@@ -422,16 +423,12 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
     }).catch(() => {});
   }, []);
 
-  // Smart defaults based on severity
   useEffect(() => {
     const defaults: Record<string, boolean> = {};
     const sev = form.severity;
     activeIntegrations.forEach(i => {
-      if (i.category === "ticketing") {
-        defaults[i.type] = sev === "critical" || sev === "high";
-      } else if (i.category === "communication") {
-        defaults[i.type] = sev !== "low";
-      }
+      if (i.category === "ticketing") defaults[i.type] = sev === "critical" || sev === "high";
+      else if (i.category === "communication") defaults[i.type] = sev !== "low";
     });
     defaults["slack"] = sev === "critical" || sev === "high";
     setActions(defaults);
@@ -440,7 +437,7 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
   const toggleAction = (key: string) => setActions(p => ({ ...p, [key]: !p[key] }));
 
   const submit = async () => {
-    setTouched({ title: true });
+    setSubmitted(true);
     if (!form.title.trim()) return;
     setSaving(true);
     try {
@@ -450,7 +447,8 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
         description: form.summary || null,
         severity: form.severity,
         source: "manual",
-        environment: "prod",
+        environment: form.environment,
+        assigned_to: form.assigned_to || null,
         actions: selectedActions.length > 0 ? selectedActions : null,
       });
       onCreated();
@@ -458,172 +456,198 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
     finally { setSaving(false); }
   };
 
-  const SEV = [
-    { key: "critical", label: "Critical", color: "#EF4444", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", emoji: "🔴" },
-    { key: "high", label: "High", color: "#F97316", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.2)", emoji: "🟠" },
-    { key: "medium", label: "Medium", color: "#EAB308", bg: "rgba(234,179,8,0.08)", border: "rgba(234,179,8,0.2)", emoji: "🟡" },
-    { key: "low", label: "Low", color: "#34D399", bg: "rgba(52,211,153,0.08)", border: "rgba(52,211,153,0.2)", emoji: "🟢" },
+  const SEV_OPTIONS = [
+    { key: "critical", label: "Critical", dot: "#C13434" },
+    { key: "high", label: "High", dot: "#D85A30" },
+    { key: "medium", label: "Medium", dot: "#B87514" },
+    { key: "low", label: "Low", dot: "#2D8B5F" },
   ];
 
-  const ACTION_STYLE: Record<string, { fg: string; bg: string; border: string; label: string; icon: string }> = {
-    slack: { fg: "var(--slack)", bg: "var(--slack-a)", border: "rgba(224,30,90,0.15)", label: "Canal Slack", icon: "SLK" },
-    jira: { fg: "#0052CC", bg: "rgba(0,82,204,0.08)", border: "rgba(0,82,204,0.15)", label: "Ticket Jira", icon: "JRA" },
-    teams: { fg: "#6264A7", bg: "rgba(98,100,167,0.08)", border: "rgba(98,100,167,0.15)", label: "Notif Teams", icon: "TMS" },
-    servicenow: { fg: "#008537", bg: "rgba(0,133,55,0.08)", border: "rgba(0,133,55,0.15)", label: "Ticket ServiceNow", icon: "SNW" },
+  const INTEGRATIONS: Record<string, { fg: string; label: string }> = {
+    slack: { fg: "#E01E5A", label: "Canal Slack" },
+    jira: { fg: "#0052CC", label: "Ticket Jira" },
+    teams: { fg: "#6264A7", label: "Notif Teams" },
+    servicenow: { fg: "#008537", label: "Ticket ServiceNow" },
   };
 
-  const activeActions = Object.entries(actions).filter(([_, v]) => v);
-  const currentSev = SEV.find(s => s.key === form.severity) || SEV[2];
+  const activeCount = Object.values(actions).filter(Boolean).length;
+
+  const fieldLabel = (text: string, optional?: boolean) => (
+    <label style={{ display: "block", fontFamily: "var(--f)", fontSize: 13, fontWeight: 500, color: "var(--t1)", marginBottom: 6 }}>
+      {text}
+      {optional && <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", fontWeight: 400, marginLeft: 6 }}>optionnel</span>}
+    </label>
+  );
+
+  const inputStyle = {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: "1px solid var(--b2)",
+    background: "var(--s1)",
+    color: "var(--t1)",
+    fontFamily: "var(--f)",
+    fontSize: 13,
+    outline: "none",
+    transition: "border-color 0.15s",
+  };
 
   return (
-    <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 20 }}>
 
-      {/* ── What's going on? ── */}
+      {/* Title */}
       <div>
-        <label style={{ fontFamily: "var(--fm)", fontSize: 13, fontWeight: 600, color: "var(--t1)", display: "block", marginBottom: 8 }}>
-          Que se passe-t-il ?
-        </label>
+        {fieldLabel("Que se passe-t-il ?")}
         <input
           type="text"
           value={form.title}
-          placeholder="Ex: Le paiement ne fonctionne plus"
+          placeholder="Le service de paiement ne répond plus"
           autoFocus
           onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-          onBlur={() => setTouched(p => ({ ...p, title: true }))}
           style={{
-            ...formInput,
-            fontSize: 14, padding: "12px 14px", fontWeight: 500,
-            borderColor: errors.title ? "var(--re)" : undefined,
+            ...inputStyle,
+            fontSize: 15, padding: "14px 16px", fontWeight: 500,
+            borderColor: hasError ? "var(--re)" : "var(--b2)",
           }}
+          onFocus={e => { if (!hasError) e.currentTarget.style.borderColor = "var(--brand)"; }}
+          onBlur={e => { if (!hasError) e.currentTarget.style.borderColor = "var(--b2)"; }}
         />
-        {errors.title && <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--re)", marginTop: 4 }}>{errors.title}</p>}
+        {hasError && <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--re)", marginTop: 6 }}>Ce champ est requis</p>}
       </div>
 
-      {/* ── Summary (optional) ── */}
+      {/* Summary */}
       <div>
-        <label style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-          Résumé <span style={{ fontSize: 9, opacity: 0.5 }}>optionnel</span>
-        </label>
+        {fieldLabel("Résumé", true)}
         <textarea
           value={form.summary}
-          rows={2}
-          placeholder="Plus de détails sur la situation..."
+          rows={3}
+          placeholder="Décrivez la situation, l'impact, ce que vous avez observé..."
           onChange={e => setForm(p => ({ ...p, summary: e.target.value }))}
-          style={{ ...formInput, resize: "none", fontFamily: "var(--fm)", fontSize: 12 }}
+          style={{ ...inputStyle, resize: "vertical", fontFamily: "var(--f)", lineHeight: 1.6, minHeight: 80 }}
+          onFocus={e => { e.currentTarget.style.borderColor = "var(--brand)"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = "var(--b2)"; }}
         />
       </div>
 
-      {/* ── Severity ── */}
-      <div>
-        <label style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", display: "block", marginBottom: 8 }}>
-          Sévérité
-        </label>
-        <div style={{ display: "flex", gap: 6 }}>
-          {SEV.map(s => (
-            <button key={s.key} onClick={() => setForm(p => ({ ...p, severity: s.key }))} style={{
-              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-              padding: "9px 6px", borderRadius: 8, cursor: "pointer",
-              border: form.severity === s.key ? `1.5px solid ${s.color}` : "1.5px solid var(--b1)",
-              background: form.severity === s.key ? s.bg : "transparent",
-              transition: "all 0.15s",
-            }}
-              onMouseEnter={e => { if (form.severity !== s.key) (e.currentTarget as HTMLElement).style.borderColor = s.border; }}
-              onMouseLeave={e => { if (form.severity !== s.key) (e.currentTarget as HTMLElement).style.borderColor = "var(--b1)"; }}
+      {/* Severity + Environment row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div>
+          {fieldLabel("Sévérité")}
+          <div style={{ position: "relative" }}>
+            <div style={{
+              position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)",
+              width: 8, height: 8, borderRadius: "50%",
+              background: SEV_OPTIONS.find(s => s.key === form.severity)?.dot || "#B87514",
+            }} />
+            <select
+              value={form.severity}
+              onChange={e => setForm(p => ({ ...p, severity: e.target.value }))}
+              style={{ ...inputStyle, paddingLeft: 28, cursor: "pointer", appearance: "none", WebkitAppearance: "none" }}
             >
-              <span style={{ fontSize: 10 }}>{s.emoji}</span>
-              <span style={{
-                fontFamily: "var(--fm)", fontSize: 11, fontWeight: form.severity === s.key ? 700 : 400,
-                color: form.severity === s.key ? s.color : "var(--t3)",
-                transition: "all 0.15s",
-              }}>{s.label}</span>
-            </button>
-          ))}
+              {SEV_OPTIONS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--t3)" strokeWidth="2" strokeLinecap="round"
+              style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+              <path d="M4 6l4 4 4-4"/>
+            </svg>
+          </div>
+        </div>
+        <div>
+          {fieldLabel("Environnement")}
+          <div style={{ position: "relative" }}>
+            <select
+              value={form.environment}
+              onChange={e => setForm(p => ({ ...p, environment: e.target.value }))}
+              style={{ ...inputStyle, cursor: "pointer", appearance: "none", WebkitAppearance: "none" }}
+            >
+              <option value="prod">Production</option>
+              <option value="staging">Staging</option>
+              <option value="dev">Développement</option>
+            </select>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--t3)" strokeWidth="2" strokeLinecap="round"
+              style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+              <path d="M4 6l4 4 4-4"/>
+            </svg>
+          </div>
         </div>
       </div>
 
-      {/* ── Actions — auto-detected from integrations ── */}
+      {/* Assigned to */}
       <div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <label style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>
-            Actions automatiques
-          </label>
-          <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: currentSev.color, fontWeight: 600 }}>
-            {activeActions.length} action{activeActions.length !== 1 ? "s" : ""} sélectionnée{activeActions.length !== 1 ? "s" : ""}
-          </span>
+        {fieldLabel("Assigné à", true)}
+        <input
+          type="text"
+          value={form.assigned_to}
+          placeholder="Rechercher un membre de l'équipe..."
+          onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))}
+          style={inputStyle}
+          onFocus={e => { e.currentTarget.style.borderColor = "var(--brand)"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = "var(--b2)"; }}
+        />
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: 1, background: "var(--b1)" }} />
+
+      {/* Actions */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          {fieldLabel("Notifications & tickets")}
+          {activeCount > 0 && (
+            <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--brand)", fontWeight: 500 }}>
+              {activeCount} active{activeCount > 1 ? "s" : ""}
+            </span>
+          )}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <ActionToggle
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {/* Slack always available */}
+          <ActionChip
             label="Canal Slack"
-            icon="SLK"
-            fg="var(--slack)"
-            bg="var(--slack-a)"
-            border="rgba(224,30,90,0.15)"
+            color="#E01E5A"
             checked={actions["slack"] ?? false}
             onChange={() => toggleAction("slack")}
           />
           {activeIntegrations.map(i => {
-            const s = ACTION_STYLE[i.type];
+            const s = INTEGRATIONS[i.type];
             if (!s) return null;
             return (
-              <ActionToggle
+              <ActionChip
                 key={i.type}
                 label={s.label}
-                icon={s.icon}
-                fg={s.fg}
-                bg={s.bg}
-                border={s.border}
+                color={s.fg}
                 checked={actions[i.type] ?? false}
                 onChange={() => toggleAction(i.type)}
               />
             );
           })}
         </div>
+        <p style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)", marginTop: 8, lineHeight: 1.5 }}>
+          Sélectionnés automatiquement selon la sévérité. Vous pouvez modifier avant de déclarer.
+        </p>
       </div>
 
-      {/* ── More options (expandable) ── */}
-      <button onClick={() => setShowMore(!showMore)} style={{
-        display: "flex", alignItems: "center", gap: 6,
-        background: "none", border: "none", cursor: "pointer",
-        fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)",
-        padding: 0, transition: "color 0.12s",
-      }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; }}
-      >
-        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-          style={{ transform: showMore ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
-          <path d="M6 4l4 4-4 4"/>
-        </svg>
-        Options supplémentaires
-      </button>
-      {showMore && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingLeft: 16, borderLeft: "2px solid var(--b1)" }}>
-          <FormField label="Environnement">
-            <select value="prod" onChange={() => {}} style={formInput}>
-              <option value="prod">Production</option><option value="staging">Staging</option><option value="dev">Dev</option>
-            </select>
-          </FormField>
-          <FormField label="Assigné à">
-            <input type="text" placeholder="Rechercher un membre..." style={formInput} />
-          </FormField>
-        </div>
-      )}
-
-      {/* ── Submit ── */}
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+      {/* Submit */}
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
         <button onClick={onClose} style={{
-          padding: "10px 20px", borderRadius: 8, fontFamily: "var(--fm)", fontSize: 12.5, fontWeight: 500,
-          cursor: "pointer", border: "1px solid var(--b2)", background: "transparent", color: "var(--t2)",
-        }}>Annuler</button>
-        <button onClick={submit} disabled={saving || !form.title.trim()} style={{
-          padding: "10px 28px", borderRadius: 8, fontFamily: "var(--f)", fontSize: 13, fontWeight: 700,
-          cursor: (saving || !form.title.trim()) ? "not-allowed" : "pointer",
-          border: "none", color: "#fff",
-          background: `linear-gradient(135deg, ${currentSev.color}, ${currentSev.color}cc)`,
-          opacity: (saving || !form.title.trim()) ? 0.5 : 1,
-          boxShadow: `0 2px 8px ${currentSev.color}30`,
+          padding: "11px 24px", borderRadius: 8, fontFamily: "var(--f)", fontSize: 13, fontWeight: 500,
+          cursor: "pointer", border: "1px solid var(--b2)", background: "var(--s1)", color: "var(--t2)",
           transition: "all 0.15s",
-        }}>
+        }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--b3)"; (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--b2)"; (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
+        >Annuler</button>
+        <button onClick={submit} disabled={saving} style={{
+          padding: "11px 32px", borderRadius: 8, fontFamily: "var(--f)", fontSize: 13, fontWeight: 600,
+          cursor: saving ? "not-allowed" : "pointer",
+          border: "none", color: "#fff",
+          background: "var(--brand)",
+          opacity: saving ? 0.6 : 1,
+          boxShadow: "0 2px 8px rgba(193,95,60,0.2)",
+          transition: "all 0.15s",
+        }}
+          onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 16px rgba(193,95,60,0.3)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(193,95,60,0.2)"; }}
+        >
           {saving ? "Déclaration..." : "Déclarer l'incident"}
         </button>
       </div>
@@ -631,44 +655,30 @@ function CreateForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
   );
 }
 
-function ActionToggle({ label, icon, fg, bg, border, checked, onChange }: {
-  label: string; icon: string; fg: string; bg: string; border: string; checked: boolean; onChange: () => void;
+function ActionChip({ label, color, checked, onChange }: {
+  label: string; color: string; checked: boolean; onChange: () => void;
 }) {
   return (
     <button onClick={onChange} style={{
-      display: "flex", alignItems: "center", gap: 10,
-      padding: "8px 12px", borderRadius: 8,
-      background: checked ? bg : "transparent",
-      border: `1px solid ${checked ? border : "var(--b1)"}`,
-      cursor: "pointer", transition: "all 0.15s", width: "100%",
-    }}>
+      display: "inline-flex", alignItems: "center", gap: 8,
+      padding: "8px 14px", borderRadius: 8, cursor: "pointer",
+      border: checked ? `1.5px solid ${color}` : "1.5px solid var(--b2)",
+      background: checked ? `${color}08` : "var(--s1)",
+      transition: "all 0.15s",
+    }}
+      onMouseEnter={e => { if (!checked) (e.currentTarget as HTMLElement).style.borderColor = "var(--b3)"; }}
+      onMouseLeave={e => { if (!checked) (e.currentTarget as HTMLElement).style.borderColor = "var(--b2)"; }}
+    >
       <div style={{
-        width: 22, height: 22, borderRadius: 6,
-        background: checked ? `${fg}18` : "var(--s2)",
-        border: `1px solid ${checked ? `${fg}30` : "var(--b2)"}`,
-        display: "grid", placeItems: "center",
-        fontFamily: "var(--fm)", fontSize: 7, fontWeight: 700,
-        color: checked ? fg : "var(--t3)",
-        transition: "all 0.15s",
-      }}>{icon}</div>
+        width: 8, height: 8, borderRadius: "50%",
+        background: checked ? color : "var(--b3)",
+        transition: "background 0.15s",
+      }} />
       <span style={{
-        fontFamily: "var(--fm)", fontSize: 11.5, fontWeight: 500,
-        color: checked ? fg : "var(--t3)",
-        flex: 1, textAlign: "left", transition: "color 0.15s",
+        fontFamily: "var(--f)", fontSize: 12.5, fontWeight: checked ? 600 : 400,
+        color: checked ? color : "var(--t2)",
+        transition: "all 0.15s",
       }}>{label}</span>
-      <div style={{
-        width: 34, height: 18, borderRadius: 9,
-        background: checked ? fg : "var(--s3)",
-        position: "relative", transition: "background 0.15s",
-      }}>
-        <div style={{
-          width: 13, height: 13, borderRadius: "50%", background: "#fff",
-          position: "absolute", top: 2.5,
-          left: checked ? 18 : 3,
-          transition: "left 0.15s",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
-        }} />
-      </div>
     </button>
   );
 }

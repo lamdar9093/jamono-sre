@@ -8,11 +8,14 @@ import Incidents from "./pages/Incidents";
 import Settings from "./pages/Settings";
 import Team from "./pages/Team";
 import Clusters from "./pages/Clusters";
-import CopilotDrawer from "./components/CopilotDrawer";
 import Integrations from "./pages/Integrations";
+import CopilotDrawer from "./components/CopilotDrawer";
+
+import ScanTriage from "./components/ScanTriage";
 
 function AppContent() {
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [triageOpen, setTriageOpen] = useState(false);
   const navigate = useNavigate();
 
   return (
@@ -27,7 +30,7 @@ function AppContent() {
     }}>
       <Sidebar />
       <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-        <TopBar onDeclareIncident={() => navigate("/incidents", { state: { openCreate: true } })} />
+        <TopBar onDeclareIncident={() => navigate("/incidents", { state: { openCreate: true } })} onScan={() => setTriageOpen(true)} />
         <main style={{
           flex: 1,
           overflowY: "auto",
@@ -37,13 +40,13 @@ function AppContent() {
           transition: "padding-right 0.25s ease",
         }}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Dashboard onScan={() => setTriageOpen(true)} />} />
             <Route path="/clusters" element={<Clusters />} />
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/team" element={<Team />} />
             <Route path="/integrations" element={<Integrations />} />
+            <Route path="/team" element={<Team />} />
           </Routes>
         </main>
 
@@ -85,6 +88,7 @@ function AppContent() {
         )}
 
         <CopilotDrawer open={copilotOpen} />
+        <ScanTriage open={triageOpen} onClose={() => setTriageOpen(false)} />
       </div>
     </div>
   );

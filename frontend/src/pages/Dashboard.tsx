@@ -38,18 +38,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleScan = async () => {
-    setLoading(true);
-    try {
-      await axios.post(`${API_URL}/monitor/scan`);
-      await fetchPods();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => { fetchPods(); }, [namespace]);
 
   const analyzeAndRemediate = async (pod: Pod) => {
@@ -357,7 +345,7 @@ export default function Dashboard() {
               textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 12,
             }}>Actions rapides</div>
             {[
-              { l: "Scanner le cluster", color: "var(--brand)", action: handleScan },
+              { l: "Scanner le cluster", color: "var(--brand)", action: fetchPods },
               { l: "Voir les incidents", color: "var(--re)", action: () => window.location.href = "/incidents" },
               { l: "Historique", color: "var(--purple)", action: () => window.location.href = "/history" },
             ].map(a => (

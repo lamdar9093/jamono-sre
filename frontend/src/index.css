@@ -79,7 +79,8 @@
   --purple-a: rgba(124,58,237,0.08);
 
   /* ── Typography ── */
-  --f:     'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* --f:     'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; */
+  --f:     'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --fm:    'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
 
   /* ── Radius ── */

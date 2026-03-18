@@ -783,6 +783,42 @@ async def get_incident_links_endpoint(incident_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Notifier un incident existant sur un canal
+class NotifyRequest(BaseModel):
+    channel: str  # "slack", "jira", "teams"
+
+@app.post("/incidents/{incident_id}/notify")
+async def notify_incident(incident_id: int, req: NotifyRequest):
+    """Envoie une notification sur un canal pour un incident existant."""
+    try:
+        incident = get_incident(incident_id)
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident introuvable")
+
+        if req.channel == "slack" and incident.get("slack_channel"):
+            post_status_update(incident["slack_channel"], incident_id, incident["status"], "scan:notify")
+            return {"status": "success", "message": "Notification Slack envoyée"}
+        elif req.channel == "slack" and not incident.get("slack_channel"):
+            component = incident.get("linked_pod") or incident["title"][:20]
+            channel_id = create_incident_channel(incident_id, component)
+            if channel_id:
+                update_slack_channel(incident_id, channel_id)
+                post_incident_briefing(channel_id, incident)
+                return {"status": "success", "message": "Canal Slack créé"}
+            raise HTTPException(status_code=400, detail="Échec création canal Slack")
+        elif req.channel == "jira":
+            result = create_ticket_manual(incident_id, "jira")
+            return {"status": "success", **result}
+        elif req.channel == "teams":
+            dispatch_incident_updated(incident, incident["status"])
+            return {"status": "success", "message": "Notification Teams envoyée"}
+        else:
+            raise HTTPException(status_code=400, detail=f"Canal '{req.channel}' non supporté")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Webhooks entrants des intégrations
 @app.post("/webhooks/{integration_type}")
 async def integration_webhook(integration_type: str, request: Request):

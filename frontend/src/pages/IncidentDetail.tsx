@@ -47,6 +47,44 @@ function timeAgo(d: string) {
   return `il y a ${Math.floor(s / 86400)}j`;
 }
 
+function StatusBtn({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "8px 16px", borderRadius: 8,
+      fontFamily: "var(--f)", fontSize: 12, fontWeight: 500,
+      cursor: "pointer", border: `1px solid ${color}25`,
+      background: `${color}08`, color, transition: "all 0.12s",
+    }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = `${color}18`; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${color}08`; }}
+    >{label}</button>
+  );
+}
+
+function EscalateBtn({ label, desc, color, onClick, loading }: {
+  label: string; desc: string; color: string; onClick: () => void; loading?: boolean;
+}) {
+  return (
+    <button onClick={onClick} disabled={loading} style={{
+      display: "flex", alignItems: "center", gap: 8, width: "100%",
+      padding: "10px 12px", borderRadius: 8, cursor: loading ? "not-allowed" : "pointer",
+      border: `1px dashed ${color}30`, background: "transparent",
+      transition: "all 0.12s", opacity: loading ? 0.5 : 1,
+    }}
+      onMouseEnter={e => { if (!loading) { (e.currentTarget as HTMLElement).style.background = `${color}04`; (e.currentTarget as HTMLElement).style.borderStyle = "solid"; } }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderStyle = "dashed"; }}
+    >
+      <div style={{ width: 24, height: 24, borderRadius: 6, background: `${color}08`, border: `1px solid ${color}15`, display: "grid", placeItems: "center" }}>
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>
+      </div>
+      <div style={{ flex: 1, textAlign: "left" }}>
+        <div style={{ fontFamily: "var(--fm)", fontSize: 11, color: color, fontWeight: 500 }}>{loading ? "Création..." : label}</div>
+        <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)" }}>{desc}</div>
+      </div>
+    </button>
+  );
+}
+
 export default function IncidentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -229,80 +267,76 @@ export default function IncidentDetail() {
             ))}
           </div>
 
-          {/* Slack */}
-          {incident.slack_channel && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", borderRadius: 10,
-              background: "rgba(224,30,90,0.04)", border: "1px solid rgba(224,30,90,0.12)",
-            }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="#E01E5A"><path d="M9.5 1.5a1.5 1.5 0 00-1.5 1.5v4h1.5A1.5 1.5 0 009.5 1.5z" opacity="0.8"/><path d="M1.5 9.5A1.5 1.5 0 003 11h4V9.5A1.5 1.5 0 001.5 9.5z" opacity="0.8"/><path d="M6.5 14.5A1.5 1.5 0 008 13V9H6.5A1.5 1.5 0 006.5 14.5z" opacity="0.8"/><path d="M14.5 6.5A1.5 1.5 0 0013 5H9v1.5A1.5 1.5 0 0014.5 6.5z" opacity="0.8"/></svg>
-              <span style={{ fontFamily: "var(--fm)", fontSize: 12, color: "#E01E5A", fontWeight: 600 }}>{incident.slack_channel}</span>
-            </div>
-          )}
-
-          {/* External links */}
+          {/* Escalade & canaux */}
           <div style={{ background: "var(--s1)", border: "1px solid var(--b1)", borderRadius: 10, padding: "14px 18px" }}>
             <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 10 }}>
-              Tickets & liens
+              Escalade & canaux
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+
+              {/* Slack */}
+              {incident.slack_channel ? (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "10px 12px", borderRadius: 8,
+                  background: "rgba(224,30,90,0.04)", border: "1px solid rgba(224,30,90,0.12)",
+                }}>
+                  <div style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(224,30,90,0.1)", display: "grid", placeItems: "center" }}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="#E01E5A"><path d="M9.5 1.5a1.5 1.5 0 00-1.5 1.5v4h1.5A1.5 1.5 0 009.5 1.5z" opacity="0.8"/><path d="M1.5 9.5A1.5 1.5 0 003 11h4V9.5A1.5 1.5 0 001.5 9.5z" opacity="0.8"/></svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "var(--fm)", fontSize: 11, color: "#E01E5A", fontWeight: 600 }}>Canal Slack</div>
+                    <div style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)" }}>{incident.slack_channel}</div>
+                  </div>
+                  <span style={{ fontFamily: "var(--fm)", fontSize: 9, color: "#2D8B5F", fontWeight: 600 }}>Actif</span>
+                </div>
+              ) : (
+                <EscalateBtn label="Escalader sur Slack" desc="Créer un canal dédié" color="#E01E5A"
+                  onClick={async () => {
+                    await axios.post(`${API_URL}/incidents/${incident.id}/notify`, { channel: "slack" });
+                    fetchAll();
+                  }}
+                />
+              )}
+
+              {/* Existing links (Jira, etc.) */}
               {links.map(link => {
                 const ls = LINK_STYLE[link.integration_type] || LINK_STYLE.github;
                 return (
                   <a key={link.id} href={link.external_url || "#"} target="_blank" rel="noopener noreferrer" style={{
                     display: "flex", alignItems: "center", gap: 8,
-                    padding: "8px 12px", borderRadius: 8,
+                    padding: "10px 12px", borderRadius: 8,
                     background: ls.bg, border: `1px solid ${ls.border}`,
                     textDecoration: "none", transition: "all 0.12s",
                   }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = ls.fg; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = ls.border; }}
                   >
-                    <span style={{ fontFamily: "var(--fm)", fontSize: 9, fontWeight: 700, color: ls.fg, textTransform: "uppercase" }}>{ls.label}</span>
-                    <span style={{ fontFamily: "var(--fm)", fontSize: 12, color: ls.fg, fontWeight: 600 }}>{link.external_id}</span>
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke={ls.fg} strokeWidth="1.5" strokeLinecap="round" style={{ marginLeft: "auto", opacity: 0.5 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 6, background: `${ls.fg}10`, display: "grid", placeItems: "center", fontFamily: "var(--fm)", fontSize: 8, fontWeight: 700, color: ls.fg }}>{ls.label.slice(0, 3).toUpperCase()}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: "var(--fm)", fontSize: 11, color: ls.fg, fontWeight: 600 }}>{link.external_id}</div>
+                      <div style={{ fontFamily: "var(--fm)", fontSize: 9, color: "var(--t3)" }}>{ls.label}</div>
+                    </div>
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke={ls.fg} strokeWidth="1.5" strokeLinecap="round" style={{ opacity: 0.5 }}>
                       <path d="M6 3h7v7M13 3L6 10"/>
                     </svg>
                   </a>
                 );
               })}
+
+              {/* Create Jira ticket if not linked */}
               {!links.some(l => l.integration_type === "jira") && (
-                <button onClick={createJira} disabled={creatingJira} style={{
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  padding: "9px 14px", borderRadius: 8,
-                  fontFamily: "var(--fm)", fontSize: 11, fontWeight: 500,
-                  cursor: creatingJira ? "not-allowed" : "pointer",
-                  border: "1px dashed rgba(0,82,204,0.25)", background: "transparent",
-                  color: "#0052CC", opacity: creatingJira ? 0.5 : 1, transition: "all 0.12s",
-                }}
-                  onMouseEnter={e => { if (!creatingJira) { (e.currentTarget as HTMLElement).style.background = "rgba(0,82,204,0.04)"; (e.currentTarget as HTMLElement).style.borderStyle = "solid"; } }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderStyle = "dashed"; }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>
-                  {creatingJira ? "Création..." : "Créer un ticket Jira"}
-                </button>
+                <EscalateBtn label="Créer un ticket Jira" desc="Ouvrir un ticket dans votre projet" color="#0052CC"
+                  onClick={async () => { setCreatingJira(true); await createJira(); }}
+                  loading={creatingJira}
+                />
               )}
-              {links.length === 0 && !creatingJira && (
-                <p style={{ fontFamily: "var(--fm)", fontSize: 10, color: "var(--t3)", textAlign: "center", padding: "4px 0" }}>Aucun ticket externe</p>
-              )}
+
             </div>
           </div>
+
         </div>
       </div>
     </div>
-  );
-}
-
-function StatusBtn({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} style={{
-      padding: "8px 16px", borderRadius: 8,
-      fontFamily: "var(--f)", fontSize: 12, fontWeight: 500,
-      cursor: "pointer", border: `1px solid ${color}25`,
-      background: `${color}08`, color, transition: "all 0.12s",
-    }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = `${color}18`; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${color}08`; }}
-    >{label}</button>
   );
 }

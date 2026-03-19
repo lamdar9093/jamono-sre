@@ -80,7 +80,7 @@
 
   /* ── Typography ── */
   /* --f:     'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; */
-  --f:     'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --f:     'Noto Sans', 'Lucida Grande', 'Lucida Sans Unicode', sans-serif;
   --fm:    'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
 
   /* ── Radius ── */

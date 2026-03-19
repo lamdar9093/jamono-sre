@@ -10,12 +10,15 @@ import Team from "./pages/Team";
 import Clusters from "./pages/Clusters";
 import Integrations from "./pages/Integrations";
 import CopilotDrawer from "./components/CopilotDrawer";
+import ScanHistoryPage from "./pages/ScanHistoryPage";
+import IncidentDetail from "./pages/IncidentDetail";
 
 import ScanTriage from "./components/ScanTriage";
 
 function AppContent() {
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [triageOpen, setTriageOpen] = useState(false);
+  const [scanRefresh, setScanRefresh] = useState(0);
   const navigate = useNavigate();
 
   return (
@@ -30,7 +33,7 @@ function AppContent() {
     }}>
       <Sidebar />
       <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-        <TopBar onDeclareIncident={() => navigate("/incidents", { state: { openCreate: true } })} onScan={() => setTriageOpen(true)} />
+        <TopBar onDeclareIncident={() => navigate("/incidents", { state: { openCreate: true } })} scanRefresh={scanRefresh} />
         <main style={{
           flex: 1,
           overflowY: "auto",
@@ -47,6 +50,8 @@ function AppContent() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/integrations" element={<Integrations />} />
             <Route path="/team" element={<Team />} />
+            <Route path="/scans" element={<ScanHistoryPage />} />
+            <Route path="/incidents/:id" element={<IncidentDetail />} />
           </Routes>
         </main>
 
@@ -88,7 +93,7 @@ function AppContent() {
         )}
 
         <CopilotDrawer open={copilotOpen} />
-        <ScanTriage open={triageOpen} onClose={() => setTriageOpen(false)} />
+        <ScanTriage open={triageOpen} onClose={() => { setTriageOpen(false); setScanRefresh(p => p + 1); }} />
       </div>
     </div>
   );

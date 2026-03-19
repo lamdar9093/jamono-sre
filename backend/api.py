@@ -34,6 +34,19 @@ from integrations import (
 )
 from integrations.registry import IntegrationRegistry
 
+# ── Notifications helper ──
+def create_notification(type: str, title: str, detail: str = None, link: str = None):
+    """Crée une notification en DB."""
+    from database import SessionLocal
+    from models import Notification
+    try:
+        db = SessionLocal()
+        notif = Notification(type=type, title=title, detail=detail, link=link)
+        db.add(notif)
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f"⚠️  [NOTIF] Erreur: {e}")
 
 # ── Lifespan ──
 @asynccontextmanager
@@ -326,6 +339,14 @@ async def create_incident_endpoint(req: IncidentCreate):
                 except Exception as e:
                     print(f"⚠️  [DISPATCH] Erreur dispatch create: {e}")
 
+            # Notification
+            create_notification(
+                type="incident_created",
+                title=f"Incident #{incident['id']} créé",
+                detail=incident["title"],
+                link=f"/incidents?open={incident['id']}",
+            )
+
         return {"status": "success", "incident": incident}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -404,6 +425,11 @@ async def update_settings_endpoint(req: SettingsUpdate):
 # MONITOR
 # ═══════════════════════════════════════════════════
 
+def _extract_deploy(pod_name: str) -> str:
+    """Extrait le nom du déploiement depuis un nom de pod."""
+    parts = pod_name.rsplit("-", 2)
+    return parts[0] if len(parts) >= 3 else pod_name
+
 @app.post("/monitor/scan")
 async def manual_scan():
     try:
@@ -414,14 +440,16 @@ async def manual_scan():
 
 @app.post("/monitor/triage")
 async def scan_triage(namespace: str = "default"):
-    """Scanne le cluster et retourne un rapport de triage sans créer d'incidents."""
+    """Scanne le cluster et retourne un rapport de triage. Sauvegarde en historique."""
     try:
         from tools.k8s_core import list_pods_tool
+        from models import ScanHistory
+        from database import SessionLocal
+
         pods = await asyncio.to_thread(list_pods_tool.invoke, {"namespace": namespace})
         if isinstance(pods, str):
             return {"status": "degraded", "pods": [], "message": pods}
 
-        # Enrichir chaque pod avec severité estimée
         report = []
         for pod in pods:
             severity = "healthy"
@@ -436,13 +464,14 @@ async def scan_triage(namespace: str = "default"):
                 else:
                     severity = "low"
 
-            # Check if incident already exists for this pod
+            deploy_name = _extract_deploy(pod["pod_name"])
             existing = None
             try:
                 all_incidents = list_incidents()
                 existing = next(
                     (i for i in all_incidents
-                     if i.get("linked_pod") == pod["pod_name"] and i.get("status") != "resolved"),
+                     if i.get("status") != "resolved" and i.get("linked_pod")
+                     and _extract_deploy(i["linked_pod"]) == deploy_name),
                     None,
                 )
             except Exception:
@@ -455,24 +484,83 @@ async def scan_triage(namespace: str = "default"):
                 "incident_id": existing["id"] if existing else None,
             })
 
-        # Sort: unhealthy first, then by restarts
         report.sort(key=lambda p: (
             0 if p["health_status"] == "UNHEALTHY" else 1,
             -p.get("restarts", 0),
         ))
 
-        unhealthy = sum(1 for p in report if p["health_status"] == "UNHEALTHY")
+        unhealthy_count = sum(1 for p in report if p["health_status"] == "UNHEALTHY")
+        healthy_count = len(report) - unhealthy_count
+
+        # Sauvegarder en historique
+        try:
+            db = SessionLocal()
+            unhealthy_details = [
+                {"pod": p["pod_name"], "severity": p["severity"], "restarts": p["restarts"], "diagnostic": p.get("diagnostic")}
+                for p in report if p["health_status"] == "UNHEALTHY"
+            ]
+            scan = ScanHistory(
+                namespace=namespace,
+                trigger="manual",
+                total_pods=len(report),
+                healthy=healthy_count,
+                unhealthy=unhealthy_count,
+                incidents_created=0,
+                details_json=json.dumps(unhealthy_details) if unhealthy_details else None,
+            )
+            db.add(scan)
+            db.commit()
+            db.close()
+            print(f"✅ [SCAN] Historique sauvegardé — {len(report)} pods, {unhealthy_count} unhealthy")
+            if unhealthy_count > 0:
+                create_notification(
+                    type="scan_complete",
+                    title=f"Scan terminé — {unhealthy_count} problème{'s' if unhealthy_count > 1 else ''}",
+                    detail=f"{len(report)} pods scannés dans {namespace}",
+                    link="/scans",
+                )
+        except Exception as e:
+            print(f"⚠️  [SCAN] Erreur sauvegarde historique: {e}")
+
         return {
             "status": "success",
             "namespace": namespace,
             "total": len(report),
-            "unhealthy": unhealthy,
-            "healthy": len(report) - unhealthy,
+            "unhealthy": unhealthy_count,
+            "healthy": healthy_count,
             "pods": report,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/monitor/scans")
+async def list_scans(limit: int = 20):
+    """Retourne l'historique des scans."""
+    from models import ScanHistory
+    from database import SessionLocal
+    try:
+        db = SessionLocal()
+        scans = db.query(ScanHistory).order_by(ScanHistory.scanned_at.desc()).limit(limit).all()
+        result = [s.to_dict() for s in scans]
+        db.close()
+        return {"status": "success", "scans": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/monitor/scans/last")
+async def last_scan():
+    """Retourne le dernier scan effectué."""
+    from models import ScanHistory
+    from database import SessionLocal
+    try:
+        db = SessionLocal()
+        scan = db.query(ScanHistory).order_by(ScanHistory.scanned_at.desc()).first()
+        db.close()
+        if not scan:
+            return {"status": "success", "scan": None}
+        return {"status": "success", "scan": scan.to_dict()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ═══════════════════════════════════════════════════
 # TEAM
@@ -830,6 +918,53 @@ async def integration_webhook(integration_type: str, request: Request):
         print(f"❌ [WEBHOOK] Erreur {integration_type}: {e}")
         return {"success": False, "message": str(e)}
 
+# ═══════════════════════════════════════════════════
+# NOTIFICATIONS
+# ═══════════════════════════════════════════════════
+
+@app.get("/notifications")
+async def get_notifications(limit: int = 20, unread_only: bool = False):
+    from database import SessionLocal
+    from models import Notification
+    try:
+        db = SessionLocal()
+        query = db.query(Notification)
+        if unread_only:
+            query = query.filter(Notification.is_read == False)
+        notifs = query.order_by(Notification.created_at.desc()).limit(limit).all()
+        unread_count = db.query(Notification).filter(Notification.is_read == False).count()
+        result = [n.to_dict() for n in notifs]
+        db.close()
+        return {"status": "success", "notifications": result, "unread_count": unread_count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/notifications/read")
+async def mark_notifications_read():
+    """Marque toutes les notifications comme lues."""
+    from database import SessionLocal
+    from models import Notification
+    try:
+        db = SessionLocal()
+        db.query(Notification).filter(Notification.is_read == False).update({"is_read": True})
+        db.commit()
+        db.close()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: int):
+    from database import SessionLocal
+    from models import Notification
+    try:
+        db = SessionLocal()
+        db.query(Notification).filter(Notification.id == notif_id).update({"is_read": True})
+        db.commit()
+        db.close()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ═══════════════════════════════════════════════════
 # HEALTH + SLACK

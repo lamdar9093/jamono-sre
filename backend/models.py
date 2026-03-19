@@ -188,6 +188,56 @@ class IncidentIntegration(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+class ScanHistory(Base):
+    """Historique des scans cluster."""
+    __tablename__ = "scan_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    namespace = Column(String(100), nullable=False, default="default")
+    trigger = Column(String(20), nullable=False, default="manual")  # manual, auto, scheduled
+    total_pods = Column(Integer, default=0)
+    healthy = Column(Integer, default=0)
+    unhealthy = Column(Integer, default=0)
+    incidents_created = Column(Integer, default=0)
+    details_json = Column(Text)  # JSON: liste des pods problématiques détectés
+    scanned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "namespace": self.namespace,
+            "trigger": self.trigger,
+            "total_pods": self.total_pods,
+            "healthy": self.healthy,
+            "unhealthy": self.unhealthy,
+            "incidents_created": self.incidents_created,
+            "details_json": self.details_json,
+            "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
+        }
+
+class Notification(Base):
+    """Notifications en temps réel."""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    type = Column(String(50), nullable=False)  # incident_created, scan_complete, remediation, slack_message
+    title = Column(String(255), nullable=False)
+    detail = Column(Text)
+    link = Column(String(255))  # URL vers la ressource (/incidents, /scans, etc.)
+    is_read = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "type": self.type,
+            "title": self.title,
+            "detail": self.detail,
+            "link": self.link,
+            "is_read": self.is_read,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 # Index composites pour les queries fréquentes
 Index("ix_incidents_status_env", Incident.status, Incident.environment)

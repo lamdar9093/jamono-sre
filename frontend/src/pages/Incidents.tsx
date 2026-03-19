@@ -101,6 +101,19 @@ export default function Incidents() {
   };
   useEffect(() => { fetch(); }, []);
 
+  // Ouvrir un incident depuis ?open=<id> (notifications)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const openId = params.get("open");
+    if (openId && incidents.length > 0) {
+      const inc = incidents.find(i => i.id === Number(openId));
+      if (inc) {
+        openDetail(inc);
+        window.history.replaceState({}, "", "/incidents");
+      }
+    }
+  }, [location.search, incidents]);
+
   const openDetail = async (inc: Incident) => {
     setSelected(inc);
     try {
@@ -254,7 +267,10 @@ function DetailDrawer({ selected, timeline, onClose, updateStatus, Pill, StatusB
       <div style={{ position: "fixed", top: 0, right: 0, height: "100%", width: 400, background: "var(--s1)", borderLeft: "1px solid var(--b1)", zIndex: 50, display: "flex", flexDirection: "column", boxShadow: "-20px 0 60px rgba(0,0,0,0.4)", animation: "slideIn 0.2s ease" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--b1)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--t3)" }}>#{selected.id}</span>
+            <a href={`/incidents/${selected.id}`} style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--brand)", fontWeight: 600, textDecoration: "none" }}
+  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
+  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.textDecoration = "none"; }}
+>#{selected.id}</a>
             <Pill sev={selected.severity} /><StatusBadge status={selected.status} />
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--t3)", cursor: "pointer", width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}

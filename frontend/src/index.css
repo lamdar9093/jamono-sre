@@ -1,155 +1,112 @@
 /* ═══════════════════════════════════════════
-   JAMONO — Design System v4
-   Palette: Light mode — Pampas + Terra Cotta
-   Sidebar: Anthracite (#1A1A19)
+   JAMONO — Design System v5
+   Inspiration: incident.io — clean, minimal, spacious
+   Sidebar: Dark (unchanged)
    ═══════════════════════════════════════════ */
 
 :root {
   /* ── Backgrounds ── */
-  --bg:    #F5F4F0;      /* Main background — pampas */
-  --s1:    #FFFFFF;       /* Surface 1 — cards, panels */
-  --s2:    #EFEDE7;       /* Surface 2 — inputs, was #F0EFEB */
-  --s3:    #E8E6DF;       /* Surface 3 — hover states */
+  --bg:    #FFFFFF;
+  --s1:    #FFFFFF;
+  --s2:    #F9F9F8;
+  --s3:    #F3F3F1;
 
   /* ── Sidebar ── */
-  --sidebar:  #1A1A19;    /* Sidebar background */
-  --sidebar2: #242423;    /* Sidebar hover */
-  --sidebar3: #2E2E2D;    /* Sidebar active */
+  --sidebar:  #1B1B1B;
+  --sidebar2: #252525;
+  --sidebar3: #2F2F2F;
 
   /* ── Borders ── */
-  --b1:    #E8E6DF;       /* Primary border */
-  --b2:    #D9D7CF;       /* Secondary border */
-  --b3:    #C8C5BC;       /* Tertiary / hover border */
+  --b1:    #EBEBEB;
+  --b2:    #E0E0DE;
+  --b3:    #D0D0CC;
 
   /* ── Text ── */
-  --t1:    #141413;       /* Primary text — anthracite */
-  --t2:    #4A4A47;       /* Secondary text — was #6B6A65, darker now */
-  --t3:    #7A7974;       /* Muted text — was #9C9B95, darker now */
+  --t1:    #1A1A1A;
+  --t2:    #555555;
+  --t3:    #999999;
 
   /* ── Sidebar text ── */
-  --st1:   #FFFFFF;                  /* Sidebar primary text */
-  --st2:   rgba(255,255,255,0.55);   /* Sidebar secondary */
-  --st3:   rgba(255,255,255,0.30);   /* Sidebar muted */
+  --st1:   #FFFFFF;
+  --st2:   rgba(255,255,255,0.60);
+  --st3:   rgba(255,255,255,0.35);
 
-  /* ── Brand — Terra Cotta ── */
+  /* ── Brand ── */
   --brand:   #C15F3C;
-  --brand2:  #DA7756;     /* Lighter brand */
-  --brand-a: rgba(193,95,60,0.08);
-  --brand-b: rgba(193,95,60,0.20);
+  --brand2:  #DA7756;
+  --brand-a: rgba(193,95,60,0.06);
+  --brand-b: rgba(193,95,60,0.15);
 
-  /* ── Legacy aliases ── */
   --jam:   #C15F3C;
   --jam2:  #DA7756;
-  --jam-a: rgba(193,95,60,0.08);
-  --jam-b: rgba(193,95,60,0.20);
+  --jam-a: rgba(193,95,60,0.06);
+  --jam-b: rgba(193,95,60,0.15);
 
-  /* ── Semantic colors ── */
-  --g:     #2D8B5F;       /* Success / healthy */
-  --g-a:   rgba(45,139,95,0.08);
-  --am:    #B87514;       /* Warning / amber */
-  --am-a:  rgba(184,117,20,0.08);
-  --re:    #C13434;       /* Error / danger */
-  --re-a:  rgba(193,52,52,0.08);
-  --bl:    #2563EB;       /* Info / blue */
-  --bl-a:  rgba(37,99,235,0.08);
+  /* ── Semantic ── */
+  --g:     #22A06B;
+  --g-a:   rgba(34,160,107,0.06);
+  --am:    #CF8A19;
+  --am-a:  rgba(207,138,25,0.06);
+  --re:    #E34935;
+  --re-a:  rgba(227,73,53,0.06);
+  --bl:    #1D7AFC;
+  --bl-a:  rgba(29,122,252,0.06);
 
   /* ── Severity ── */
-  --sev-critical:     #C13434;
-  --sev-critical-a:   rgba(193,52,52,0.08);
-  --sev-high:         #D85A30;
-  --sev-high-a:       rgba(216,90,48,0.08);
-  --sev-medium:       #B87514;
-  --sev-medium-a:     rgba(184,117,20,0.08);
-  --sev-low:          #2D8B5F;
-  --sev-low-a:        rgba(45,139,95,0.08);
+  --sev-critical:     #E34935;
+  --sev-critical-a:   rgba(227,73,53,0.06);
+  --sev-high:         #E07B34;
+  --sev-high-a:       rgba(224,123,52,0.06);
+  --sev-medium:       #CF8A19;
+  --sev-medium-a:     rgba(207,138,25,0.06);
+  --sev-low:          #22A06B;
+  --sev-low-a:        rgba(34,160,107,0.06);
 
   /* ── Cloud providers ── */
   --aws:     #FF9900;
   --azure:   #0078D4;
   --gcp:     #4285F4;
   --rancher: #0075A8;
-  --k3s:     #C19A00;
+  --k3s:     #B8960C;
 
   /* ── Integrations ── */
   --slack:   #E01E5A;
-  --slack-a: rgba(224,30,90,0.08);
+  --slack-a: rgba(224,30,90,0.06);
 
   /* ── Extras ── */
   --purple:   #7C3AED;
-  --purple-a: rgba(124,58,237,0.08);
+  --purple-a: rgba(124,58,237,0.06);
 
   /* ── Typography ── */
-  /* --f:     'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; */
   --f:     'Noto Sans', 'Lucida Grande', 'Lucida Sans Unicode', sans-serif;
-  --fm:    'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --fm:    'Noto Sans', 'Lucida Grande', 'Lucida Sans Unicode', sans-serif;
 
   /* ── Radius ── */
   --r:     8px;
 }
 
-/* ── Reset & Base ── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
   background: var(--bg);
   color: var(--t1);
   font-family: var(--f);
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar {
-  width: 5px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--b3);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--b2);
-}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--b3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--b2); }
 
-/* ── Animations ── */
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes slideIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-/* ── Selection ── */
-::selection {
-  background: var(--brand-b);
-  color: var(--t1);
-}
+::selection { background: var(--brand-b); color: var(--t1); }

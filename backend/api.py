@@ -512,13 +512,7 @@ async def scan_triage(namespace: str = "default"):
             db.commit()
             db.close()
             print(f"✅ [SCAN] Historique sauvegardé — {len(report)} pods, {unhealthy_count} unhealthy")
-            if unhealthy_count > 0:
-                create_notification(
-                    type="scan_complete",
-                    title=f"Scan terminé — {unhealthy_count} problème{'s' if unhealthy_count > 1 else ''}",
-                    detail=f"{len(report)} pods scannés dans {namespace}",
-                    link="/scans",
-                )
+            # Pas de notification scan — l'onglet /scans gère l'historique
         except Exception as e:
             print(f"⚠️  [SCAN] Erreur sauvegarde historique: {e}")
 

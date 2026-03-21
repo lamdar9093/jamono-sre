@@ -238,6 +238,50 @@ class Notification(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+# ═══════════════════════════════════════════
+# KNOWLEDGE BASE — à ajouter dans models.py
+# avant les Index composites
+# ═══════════════════════════════════════════
+
+class KnowledgeEntry(Base):
+    """Solutions validées par l'IA, réutilisables sans tokens."""
+    __tablename__ = "knowledge_base"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    error_pattern = Column(String(100), nullable=False, index=True)       # CrashLoopBackOff, OOMKilled, ImagePullBackOff...
+    error_signature = Column(String(255), nullable=False, unique=True)    # Hash unique: pattern + container + image
+    component = Column(String(255))                                        # Deployment/service name
+    diagnostic = Column(Text, nullable=False)                              # Ce que l'IA a trouvé
+    solution = Column(Text, nullable=False)                                # Ce qui a corrigé le problème
+    action_type = Column(String(50))                                       # PATCH_RESOURCES, PATCH_COMMAND, RESTART, MANUAL
+    action_payload = Column(Text)                                          # JSON: les paramètres exacts de la remédiation
+    confidence = Column(Integer, default=50)                               # 0-100, augmente à chaque réutilisation réussie
+    times_used = Column(Integer, default=0)
+    times_succeeded = Column(Integer, default=0)
+    times_failed = Column(Integer, default=0)
+    source = Column(String(20), default="ai")                             # ai, manual, rules
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_used_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "error_pattern": self.error_pattern,
+            "error_signature": self.error_signature,
+            "component": self.component,
+            "diagnostic": self.diagnostic,
+            "solution": self.solution,
+            "action_type": self.action_type,
+            "action_payload": self.action_payload,
+            "confidence": self.confidence,
+            "times_used": self.times_used,
+            "times_succeeded": self.times_succeeded,
+            "times_failed": self.times_failed,
+            "source": self.source,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+        }
 
 # Index composites pour les queries fréquentes
 Index("ix_incidents_status_env", Incident.status, Incident.environment)

@@ -1,5 +1,11 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse as _JSONResponse
+
+class JSONResponse(_JSONResponse):
+    def render(self, content) -> bytes:
+        import json
+        return json.dumps(content, ensure_ascii=False).encode("utf-8")
 from pydantic import BaseModel
 from typing import Optional
 import uuid
@@ -74,7 +80,7 @@ async def _watch_incidents_loop():
 
 
 # ── App ──
-app = FastAPI(title="Jamono SRE API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="Jamono SRE API", version="2.0.0", lifespan=lifespan, default_response_class=JSONResponse)
 
 app.add_middleware(
     CORSMiddleware,
@@ -211,6 +217,111 @@ async def analyze_pod(req: AnalyzeRequest):
         }
     except Exception as e:
         print(f"API Error [/remediation/analyze]: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════
+# REMEDIATION — Apply + KB save
+# ═══════════════════════════════════════════════════
+
+class ApplyRemediationRequest(BaseModel):
+    pod_name: str
+    deployment_name: str
+    namespace: str = "default"
+    action_type: str  # PATCH_RESOURCES, PATCH_COMMAND
+    change_before: Optional[str] = None
+    change_after: Optional[str] = None  # "256Mi" ou '["sh","-c","sleep infinity"]'
+    diagnostic: str = ""
+    analysis: str = ""
+
+@app.post("/remediation/apply")
+async def apply_remediation(req: ApplyRemediationRequest):
+    """Applique une remédiation approuvée et sauvegarde dans le KB si succès."""
+    from tools.k8s_remediation import patch_deployment_resources_tool, patch_deployment_command_tool
+    from tools.k8s_core import list_pods_tool
+    from knowledge_base import kb_save
+    import time
+
+    try:
+        result = ""
+
+        if req.action_type == "PATCH_RESOURCES":
+            result = await asyncio.to_thread(
+                patch_deployment_resources_tool.invoke,
+                {"deployment_name": req.deployment_name, "memory_limit": req.change_after, "namespace": req.namespace}
+            )
+        elif req.action_type == "PATCH_COMMAND":
+            new_cmd = json.loads(req.change_after) if isinstance(req.change_after, str) else req.change_after
+            result = await asyncio.to_thread(
+                patch_deployment_command_tool.invoke,
+                {"deployment_name": req.deployment_name, "new_command": new_cmd, "namespace": req.namespace}
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Action type '{req.action_type}' non supporté")
+
+        success = "SUCCÈS" in result
+
+        # Log dans l'audit
+        action_id = log_action(
+            pod_name=req.pod_name,
+            action_type=req.action_type,
+            change_before=req.change_before or "",
+            change_after=req.change_after or "",
+        )
+        update_action_status(action_id, "success" if success else "failed")
+
+        # Si succès → vérifier que le pod revient healthy (attendre 5s)
+        if success:
+            await asyncio.sleep(5)
+            pods = await asyncio.to_thread(list_pods_tool.invoke, {"namespace": req.namespace})
+            pod_healthy = False
+            if isinstance(pods, list):
+                for p in pods:
+                    if req.deployment_name in p.get("pod_name", ""):
+                        if p.get("health_status") == "HEALTHY":
+                            pod_healthy = True
+                            break
+
+            # Sauvegarder dans le KB — la solution a été appliquée
+            solution = f"{req.analysis}\n\nAction appliquée: {req.action_type} — {req.change_before} → {req.change_after}"
+            kb_entry = kb_save(
+                diagnostic=req.diagnostic,
+                pod_name=req.pod_name,
+                solution=solution,
+                action_type=req.action_type,
+                action_payload={
+                    "deployment_name": req.deployment_name,
+                    "change_before": req.change_before,
+                    "change_after": req.change_after,
+                    "verified_healthy": pod_healthy,
+                },
+                source="ai",
+            )
+
+            # Si le pod est revenu healthy → augmenter la confiance
+            if pod_healthy and kb_entry:
+                from knowledge_base import kb_record_outcome
+                kb_record_outcome(kb_entry["id"], True)
+
+            return {
+                "status": "success",
+                "result": result,
+                "pod_healthy": pod_healthy,
+                "kb_saved": kb_entry is not None,
+                "kb_entry_id": kb_entry["id"] if kb_entry else None,
+            }
+        else:
+            return {
+                "status": "failed",
+                "result": result,
+                "pod_healthy": False,
+                "kb_saved": False,
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ [REMEDIATION] Erreur: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -975,3 +1086,81 @@ async def slack_events(request: Request):
         return {"challenge": body.get("challenge")}
     asyncio.create_task(handle_slack_event(body))
     return {"ok": True}
+
+# ═══════════════════════════════════════════════════
+# KNOWLEDGE BASE — à ajouter dans api.py
+# ═══════════════════════════════════════════════════
+
+# Ajouter dans les imports en haut de api.py :
+# from knowledge_base import kb_search, kb_save, kb_list, kb_stats, kb_record_outcome
+
+@app.get("/kb")
+async def get_knowledge_base(limit: int = 50):
+    """Liste toutes les entrées du Knowledge Base."""
+    from knowledge_base import kb_list, kb_stats
+    try:
+        entries = kb_list(limit)
+        stats = kb_stats()
+        return {"status": "success", "entries": entries, "stats": stats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/kb/search")
+async def search_knowledge_base(diagnostic: str, pod_name: str = "", image: str = ""):
+    """Cherche une solution dans le KB."""
+    from knowledge_base import kb_search
+    try:
+        result = kb_search(diagnostic, pod_name, image)
+        if result:
+            return {"status": "success", "found": True, **result}
+        return {"status": "success", "found": False}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/kb/save")
+async def save_to_knowledge_base(request: Request):
+    """Sauvegarde manuelle d'une solution dans le KB."""
+    from knowledge_base import kb_save
+    try:
+        data = await request.json()
+        entry = kb_save(
+            diagnostic=data.get("diagnostic", ""),
+            pod_name=data.get("pod_name", ""),
+            solution=data.get("solution", ""),
+            action_type=data.get("action_type", "MANUAL"),
+            action_payload=data.get("action_payload"),
+            source="manual",
+        )
+        if entry:
+            return {"status": "success", "entry": entry}
+        raise HTTPException(status_code=500, detail="Erreur sauvegarde KB")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/kb/{entry_id}/outcome")
+async def record_kb_outcome(entry_id: int, request: Request):
+    """Enregistre si une solution a fonctionné ou non."""
+    from knowledge_base import kb_record_outcome
+    try:
+        data = await request.json()
+        success = data.get("success", False)
+        kb_record_outcome(entry_id, success)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/kb/{entry_id}")
+async def delete_kb_entry(entry_id: int):
+    """Supprime une entrée du KB."""
+    from database import SessionLocal
+    from models import KnowledgeEntry
+    try:
+        db = SessionLocal()
+        db.query(KnowledgeEntry).filter(KnowledgeEntry.id == entry_id).delete()
+        db.commit()
+        db.close()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

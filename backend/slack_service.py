@@ -479,12 +479,12 @@ def _open_escalate_modal(incident_id: int, channel_id: str, trigger_id: str) -> 
                         "element": {
                             "type": "static_select",
                             "action_id": "priority_select",
-                            "initial_option": {"text": {"type": "plain_text", "text": "Urgente"}, "value": "urgente"},
+                            "initial_option": {"text": {"type": "plain_text", "text": "🚨 Urgente", "emoji": True}, "value": "urgente"},
                             "options": [
-                                {"text": {"type": "plain_text", "text": "🚨 Urgente"}, "value": "urgente"},
-                                {"text": {"type": "plain_text", "text": "🔴 Haute"}, "value": "haute"},
-                                {"text": {"type": "plain_text", "text": "🟠 Normale"}, "value": "normale"},
-                                {"text": {"type": "plain_text", "text": "🟡 Basse"}, "value": "basse"},
+                                {"text": {"type": "plain_text", "text": "🚨 Urgente", "emoji": True}, "value": "urgente"},
+                                {"text": {"type": "plain_text", "text": "🔴 Haute", "emoji": True}, "value": "haute"},
+                                {"text": {"type": "plain_text", "text": "🟠 Normale", "emoji": True}, "value": "normale"},
+                                {"text": {"type": "plain_text", "text": "🟡 Basse", "emoji": True}, "value": "basse"},
                             ]
                         }
                     },

@@ -316,9 +316,15 @@ def notify_default_channel(message: str):
 
 def handle_slack_interaction(payload: dict) -> dict:
     """
-    Traite les interactions Slack (boutons cliqués dans les messages).
+    Traite les interactions Slack (boutons + soumissions de modals).
     Appelé par POST /slack/interactions dans api.py.
     """
+    payload_type = payload.get("type")
+
+    if payload_type == "view_submission":
+        return _handle_view_submission(payload)
+
+    # block_actions
     action = payload.get("actions", [{}])[0]
     action_id = action.get("action_id", "")
     user = payload.get("user", {})
@@ -326,107 +332,257 @@ def handle_slack_interaction(payload: dict) -> dict:
     user_name = user.get("username", "inconnu")
     channel = payload.get("channel", {})
     channel_id = channel.get("id", "")
+    trigger_id = payload.get("trigger_id", "")
     incident_id_str = action.get("value", "0")
 
     try:
         incident_id = int(incident_id_str)
     except ValueError:
-        return {"text": "Erreur : ID incident invalide"}
+        return {}
 
     if action_id.startswith("assign_self_"):
         return _handle_assign_self(incident_id, user_id, user_name, channel_id)
     elif action_id.startswith("overview_"):
-        return _handle_overview(incident_id, channel_id)
+        return _open_overview_modal(incident_id, trigger_id)
     elif action_id.startswith("escalate_"):
-        return _handle_escalate_prompt(incident_id, channel_id)
+        return _open_escalate_modal(incident_id, channel_id, trigger_id)
     elif action_id.startswith("commands_"):
-        return _handle_commands(incident_id, channel_id)
+        return _open_commands_modal(incident_id, trigger_id)
 
-    return {"text": "Action non reconnue"}
+    return {}
 
 
 def _handle_assign_self(incident_id: int, user_id: str, user_name: str, channel_id: str) -> dict:
-    """L'utilisateur se l'assigne à lui-même."""
+    """L'utilisateur se l'assigne à lui-même — action directe, pas de modal."""
     from incidents import update_incident_assignment
     try:
         update_incident_assignment(incident_id, user_name, author=f"slack:{user_name}")
         post_assignment_notification(channel_id, incident_id, user_id, user_name)
-        return {"text": f"✅ Vous êtes maintenant responsable de l'incident #{incident_id}"}
     except Exception as e:
-        return {"text": f"❌ Erreur : {e}"}
+        client = get_slack_client()
+        if client:
+            try:
+                client.chat_postMessage(channel=channel_id, text=f"❌ Erreur assignation : {e}")
+            except SlackApiError:
+                pass
+    return {}
 
 
-def _handle_overview(incident_id: int, channel_id: str) -> dict:
-    """Affiche un résumé de l'incident dans un message éphémère."""
+def _open_overview_modal(incident_id: int, trigger_id: str) -> dict:
+    """Ouvre un modal Slack avec l'aperçu complet de l'incident."""
     from incidents import get_incident
     incident = get_incident(incident_id)
     if not incident:
-        return {"text": "Incident introuvable"}
+        return {}
+
+    client = get_slack_client()
+    if not client or not trigger_id:
+        return {}
 
     platform_url = _get_platform_url()
     sev_emoji = _severity_emoji(incident.get("severity", "medium"))
     status = _status_label(incident.get("status", "open"))
+    channel = incident.get("slack_channel", "")
 
-    text = f"""*INC-{incident_id} — Aperçu*
+    # Lien canal Slack si disponible
+    channel_link = ""
+    if channel and channel.startswith("#"):
+        channel_link = f"  🔗 <#{channel[1:]}|Canal Slack>"
 
-*{incident['title']}*
-{incident.get('description') or '_Aucune description_'}
+    blocks = [
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*{incident['title']}*"}
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": incident.get("description") or "_Aucune description_"}
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"{sev_emoji} *Sévérité:* {incident.get('severity', '—').capitalize()}"},
+                {"type": "mrkdwn", "text": f"📊 *Statut:* {status}"},
+                {"type": "mrkdwn", "text": f"👤 *Responsable:* {incident.get('assigned_to') or 'Non assigné'}"},
+                {"type": "mrkdwn", "text": f"👷 *Créé par:* {incident.get('created_by', '—')}"},
+            ]
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"🌐 <{platform_url}/incidents/{incident_id}|Ouvrir dans Jamono>{channel_link}"}
+        },
+    ]
 
-{sev_emoji} *Sévérité :* {incident.get('severity', '—').capitalize()}
-📊 *Statut :* {status}
-👤 *Responsable :* {incident.get('assigned_to') or '_Non assigné_'}
-🌐 *Environnement :* {incident.get('environment', '—')}
+    try:
+        client.views_open(
+            trigger_id=trigger_id,
+            view={
+                "type": "modal",
+                "title": {"type": "plain_text", "text": f"INC-{incident_id} — Aperçu"},
+                "close": {"type": "plain_text", "text": "Fermer"},
+                "blocks": blocks,
+            }
+        )
+    except SlackApiError as e:
+        print(f"❌ [SLACK] Erreur views.open aperçu : {e.response['error']}")
+    return {}
 
-🔗 <{platform_url}/incidents/{incident_id}|Ouvrir dans Jamono>"""
 
+def _open_escalate_modal(incident_id: int, channel_id: str, trigger_id: str) -> dict:
+    """Ouvre un modal Slack pour saisir les détails de l'escalade."""
     client = get_slack_client()
-    if client:
-        try:
-            client.chat_postMessage(channel=channel_id, text=text, mrkdwn=True)
-        except SlackApiError:
-            pass
-    return {"text": text}
+    if not client or not trigger_id:
+        return {}
+
+    try:
+        client.views_open(
+            trigger_id=trigger_id,
+            view={
+                "type": "modal",
+                "callback_id": "escalate_submit",
+                "private_metadata": json.dumps({"incident_id": incident_id, "channel_id": channel_id}),
+                "title": {"type": "plain_text", "text": "Escalader"},
+                "submit": {"type": "plain_text", "text": "Escalader"},
+                "close": {"type": "plain_text", "text": "Annuler"},
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": f"*Escalader l'Incident #{incident_id}*\nQui alerter et pourquoi ?"}
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "target_user",
+                        "label": {"type": "plain_text", "text": "Qui alerter ?"},
+                        "element": {
+                            "type": "users_select",
+                            "action_id": "user_select",
+                            "placeholder": {"type": "plain_text", "text": "Sélectionner un utilisateur"}
+                        }
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "escalation_message",
+                        "label": {"type": "plain_text", "text": "Message"},
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "message_input",
+                            "multiline": True,
+                            "placeholder": {"type": "plain_text", "text": "Décrivez pourquoi vous avez besoin d'aide..."}
+                        }
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "escalation_priority",
+                        "label": {"type": "plain_text", "text": "Priorité"},
+                        "element": {
+                            "type": "static_select",
+                            "action_id": "priority_select",
+                            "initial_option": {"text": {"type": "plain_text", "text": "Urgente"}, "value": "urgente"},
+                            "options": [
+                                {"text": {"type": "plain_text", "text": "🚨 Urgente"}, "value": "urgente"},
+                                {"text": {"type": "plain_text", "text": "🔴 Haute"}, "value": "haute"},
+                                {"text": {"type": "plain_text", "text": "🟠 Normale"}, "value": "normale"},
+                                {"text": {"type": "plain_text", "text": "🟡 Basse"}, "value": "basse"},
+                            ]
+                        }
+                    },
+                ]
+            }
+        )
+    except SlackApiError as e:
+        print(f"❌ [SLACK] Erreur views.open escalade : {e.response['error']}")
+    return {}
 
 
-def _handle_escalate_prompt(incident_id: int, channel_id: str) -> dict:
-    """Affiche les instructions d'escalade."""
+def _open_commands_modal(incident_id: int, trigger_id: str) -> dict:
+    """Ouvre un modal Slack listant toutes les commandes disponibles."""
     client = get_slack_client()
-    if client:
-        text = f"""🚀 *Escalader l'Incident #{incident_id}*
+    if not client or not trigger_id:
+        return {}
 
-Pour escalader, utilisez la commande :
-`@Jamono escalade @personne [message]`
+    title = f"Incident #{incident_id}" if incident_id else "Commandes"
 
-Exemple :
-`@Jamono escalade @lamine Le pod payment-service ne répond plus, besoin de ton aide urgente`
+    try:
+        client.views_open(
+            trigger_id=trigger_id,
+            view={
+                "type": "modal",
+                "title": {"type": "plain_text", "text": "Commandes Jamono"},
+                "close": {"type": "plain_text", "text": "Fermer"},
+                "blocks": [
+                    {
+                        "type": "header",
+                        "text": {"type": "plain_text", "text": f"Commandes — {title}", "emoji": True}
+                    },
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "*Diagnostic :*"}
+                    },
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "• `@Jamono status` — État actuel du pod\n• `@Jamono analyse` — Diagnostic IA complet"}
+                    },
+                    {"type": "divider"},
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "*Actions :*"}
+                    },
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "• `@Jamono resolve` — Résoudre l'incident\n• `@Jamono assign @user` — Réassigner\n• `@Jamono escalade @user [message]` — Escalader"}
+                    },
+                    {"type": "divider"},
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "*Infos :*"}
+                    },
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "• `@Jamono aperçu` — Résumé de l'incident\n• `@Jamono aide` — Afficher ce message"}
+                    },
+                ]
+            }
+        )
+    except SlackApiError as e:
+        print(f"❌ [SLACK] Erreur views.open commandes : {e.response['error']}")
+    return {}
 
-La personne recevra un message direct avec votre demande."""
-        try:
-            client.chat_postMessage(channel=channel_id, text=text, mrkdwn=True)
-        except SlackApiError:
-            pass
-    return {"text": "Instructions d'escalade envoyées"}
+
+def _handle_view_submission(payload: dict) -> dict:
+    """Traite la soumission d'un modal."""
+    view = payload.get("view", {})
+    callback_id = view.get("callback_id", "")
+
+    if callback_id == "escalate_submit":
+        return _process_escalate_submission(payload)
+
+    return {"response_action": "clear"}
 
 
-def _handle_commands(incident_id: int, channel_id: str) -> dict:
-    """Affiche la liste des commandes disponibles."""
-    client = get_slack_client()
-    if client:
-        blocks = [
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": f"💬 Commandes — Incident #{incident_id}", "emoji": True}
-            },
-            {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": "*Diagnostic :*\n• `@Jamono status` — État actuel du pod\n• `@Jamono analyse` — Diagnostic IA complet\n\n*Actions :*\n• `@Jamono resolve` — Résoudre l'incident\n• `@Jamono assign @user` — Réassigner\n• `@Jamono escalade @user [message]` — Escalader\n\n*Infos :*\n• `@Jamono aperçu` — Résumé de l'incident\n• `@Jamono aide` — Afficher ce message"}
-            },
-        ]
-        try:
-            client.chat_postMessage(channel=channel_id, text="Commandes Jamono", blocks=blocks)
-        except SlackApiError:
-            pass
-    return {"text": "Commandes affichées"}
+def _process_escalate_submission(payload: dict) -> dict:
+    """Traite la soumission du modal d'escalade."""
+    view = payload.get("view", {})
+    user = payload.get("user", {})
+    user_id = user.get("id", "")
+
+    try:
+        metadata = json.loads(view.get("private_metadata", "{}"))
+        incident_id = metadata.get("incident_id")
+        channel_id = metadata.get("channel_id")
+    except Exception:
+        return {"response_action": "clear"}
+
+    values = view.get("state", {}).get("values", {})
+    target_user_id = values.get("target_user", {}).get("user_select", {}).get("selected_user", "")
+    message = values.get("escalation_message", {}).get("message_input", {}).get("value", "")
+    priority = (values.get("escalation_priority", {}).get("priority_select", {}).get("selected_option") or {}).get("value", "haute")
+
+    if incident_id and channel_id and target_user_id:
+        post_escalation(channel_id, incident_id, user_id, target_user_id, message or f"Votre aide est requise sur l'incident #{incident_id}", priority)
+
+    return {"response_action": "clear"}
 
 
 # ═══════════════════════════════════════════════════
@@ -483,10 +639,10 @@ async def handle_mention(event: dict):
     elif "aperçu" in command_match or "overview" in command_match:
         await cmd_overview(client, channel_id)
     elif "aide" in command_match or "help" in command_match:
-        _handle_commands(0, channel_id)
+        _post_commands_text(client, channel_id)
     else:
         # Commande non reconnue → afficher l'aide
-        _handle_commands(0, channel_id)
+        _post_commands_text(client, channel_id)
 
 
 # ═══════════════════════════════════════════════════
@@ -611,7 +767,50 @@ async def cmd_overview(client: WebClient, channel_id: str):
     if not incident:
         client.chat_postMessage(channel=channel_id, text="⚠️ Aucun incident lié à ce canal.")
         return
-    _handle_overview(incident["id"], channel_id)
+    # Pas de trigger_id via mention → fallback texte
+    platform_url = _get_platform_url()
+    sev_emoji = _severity_emoji(incident.get("severity", "medium"))
+    status = _status_label(incident.get("status", "open"))
+    inc_id = incident["id"]
+    text = (
+        f"*INC-{inc_id} — Aperçu*\n\n"
+        f"*{incident['title']}*\n"
+        f"{incident.get('description') or '_Aucune description_'}\n\n"
+        f"{sev_emoji} *Sévérité :* {incident.get('severity', '—').capitalize()}\n"
+        f"📊 *Statut :* {status}\n"
+        f"👤 *Responsable :* {incident.get('assigned_to') or '_Non assigné_'}\n"
+        f"🌐 *Environnement :* {incident.get('environment', '—')}\n\n"
+        f"🔗 <{platform_url}/incidents/{inc_id}|Ouvrir dans Jamono>"
+    )
+    client.chat_postMessage(channel=channel_id, text=text, mrkdwn=True)
+
+
+def _post_commands_text(client: WebClient, channel_id: str):
+    """Fallback texte pour @Jamono aide (pas de trigger_id disponible via mention)."""
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Commandes Jamono", "emoji": True}
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "*Diagnostic :*\n• `@Jamono status` — État actuel du pod\n• `@Jamono analyse` — Diagnostic IA complet"}
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "*Actions :*\n• `@Jamono resolve` — Résoudre l'incident\n• `@Jamono assign @user` — Réassigner\n• `@Jamono escalade @user [message]` — Escalader"}
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "*Infos :*\n• `@Jamono aperçu` — Résumé de l'incident\n• `@Jamono aide` — Afficher ce message"}
+        },
+    ]
+    try:
+        client.chat_postMessage(channel=channel_id, text="Commandes Jamono", blocks=blocks)
+    except SlackApiError as e:
+        print(f"❌ [SLACK] Erreur commandes texte : {e.response['error']}")
 
 
 async def cmd_analyse(client: WebClient, channel_id: str):

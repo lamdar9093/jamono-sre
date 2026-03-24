@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse as _JSONResponse
+from slack_service import handle_slack_interaction
 
 class JSONResponse(_JSONResponse):
     def render(self, content) -> bytes:
@@ -1025,6 +1026,22 @@ async def notify_incident(incident_id: int, req: NotifyRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/slack/interactions")
+async def slack_interactions(request: Request):
+    """
+    Endpoint pour les interactions Slack (boutons cliqués dans les messages).
+    """
+    form = await request.form()
+    payload_str = form.get("payload", "")
+    if not payload_str:
+        raise HTTPException(status_code=400, detail="No payload")
+    
+    import json
+    payload = json.loads(payload_str)
+    
+    result = handle_slack_interaction(payload)
+    return result
 
 # Webhooks entrants des intégrations
 @app.post("/webhooks/{integration_type}")

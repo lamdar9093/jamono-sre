@@ -113,6 +113,38 @@ def update_incident_status(incident_id: int, new_status: str, author: str = "adm
         db.close()
 
 
+def update_incident_assignment(incident_id: int, assigned_to: str, author: str = "admin"):
+    """Met à jour l'assignation d'un incident et ajoute un événement timeline."""
+    db = SessionLocal()
+    try:
+        incident = db.query(Incident).filter(Incident.id == incident_id).first()
+        if not incident:
+            raise ValueError("Incident introuvable")
+        
+        old_assignee = incident.assigned_to
+        incident.assigned_to = assigned_to
+        incident.updated_at = datetime.now()
+        
+        # Si l'incident était "open", le passer "in_progress"
+        if incident.status == "open":
+            incident.status = "in_progress"
+        
+        # Timeline
+        timeline_entry = IncidentTimeline(
+            incident_id=incident_id,
+            action="assigned",
+            author=author,
+            detail=f"{assigned_to} a pris en charge l'incident" + (f" (était: {old_assignee})" if old_assignee else ""),
+            timestamp=datetime.now(),
+        )
+        db.add(timeline_entry)
+        db.commit()
+        
+        return incident.to_dict() if hasattr(incident, 'to_dict') else {"id": incident.id, "assigned_to": assigned_to}
+    finally:
+        db.close()
+
+
 def add_timeline_entry(incident_id: int, action: str, detail: str, author: str = "admin"):
     db = SessionLocal()
     try:

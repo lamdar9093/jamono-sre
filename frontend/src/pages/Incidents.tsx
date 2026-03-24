@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../config";
 import Modal, { formInput, FormField, FormActions } from "../components/Modal";
+import KanbanBoard from "../components/KanbanBoard";
 
 interface Incident {
   id: number; title: string; description: string | null; severity: string; status: string;
@@ -49,6 +50,7 @@ export default function Incidents() {
   const [filterEnv, setFilterEnv] = useState("all");
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [view, setView] = useState<"list" | "board">("list");
   const [selected, setSelected] = useState<Incident | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
 
@@ -142,10 +144,23 @@ export default function Incidents() {
             transition: "all 0.12s",
           }}>{e === "all" ? "All envs" : e}</button>
         ))}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 2, background: "var(--s2)", borderRadius: 8, padding: 3 }}>
+          {([["list", <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>], ["board", <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="1" y="1" width="4" height="14" rx="1"/><rect x="6" y="1" width="4" height="14" rx="1"/><rect x="11" y="1" width="4" height="14" rx="1"/></svg>]] as [string, React.ReactNode][]).map(([v, icon]) => (
+            <button key={v} onClick={() => setView(v as "list" | "board")} style={{
+              width: 30, height: 26, borderRadius: 6, border: "none", cursor: "pointer", display: "grid", placeItems: "center",
+              background: view === v ? "var(--s1)" : "transparent",
+              color: view === v ? "var(--t1)" : "var(--t3)",
+              transition: "all 0.12s",
+            }}>{icon}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Table */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 1, background: "var(--b1)", borderRadius: 12, overflow: "hidden" }}>
+      {/* Board / Table */}
+      {view === "board" ? (
+        <KanbanBoard incidents={filtered} onStatusChange={updateStatus} onSelect={openDetail} />
+      ) : null}
+      <div style={{ display: view === "list" ? "flex" : "none", flexDirection: "column", gap: 1, background: "var(--b1)", borderRadius: 12, overflow: "hidden" }}>
         {/* Header row */}
         <div style={{
           display: "grid", gridTemplateColumns: "44px 80px 1fr 75px 100px 80px 44px",

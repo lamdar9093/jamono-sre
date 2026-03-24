@@ -1,4 +1,5 @@
 # Service Slack — création de canaux, envoi de messages et notifications d'incidents
+import asyncio
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from settings import get_setting
@@ -30,8 +31,8 @@ def get_bot_user_id() -> str | None:
 def is_slack_enabled() -> bool:
     return str(get_setting("slack_enabled")).lower() == "true" and bool(get_setting("slack_bot_token"))
 
-def create_incident_channel(incident_id: int, component: str) -> str | None:
-    """Crée un canal Slack dédié à l'incident. Retourne le channel_id."""
+def create_incident_channel(incident_id: int, component: str) -> tuple[str, str] | None:
+    """Crée un canal Slack dédié à l'incident. Retourne (channel_id, channel_name)."""
     if not is_slack_enabled():
         return None
     if str(get_setting("slack_create_channel_per_incident")).lower() != "true":
@@ -50,7 +51,7 @@ def create_incident_channel(incident_id: int, component: str) -> str | None:
         client.conversations_join(channel=channel_id)
         invite_oncall_members(channel_id)
         print(f"✅ [SLACK] Canal créé : #{channel_name} ({channel_id})")
-        return channel_id
+        return channel_id, f"#{channel_name}"
     except SlackApiError as e:
         # Canal déjà existant
         if e.response["error"] == "name_taken":
@@ -256,11 +257,19 @@ async def handle_mention(event: dict):
             text="🤖 Commandes disponibles :\n• `@Jamono status` — état du pod\n• `@Jamono analyse` — diagnostic IA\n• `@Jamono resolve` — fermer l'incident\n• `@Jamono assign @username` — réassigner"
         )
 
+def _resolve_channel_name(client: WebClient, channel_id: str) -> str:
+    """Retourne #channel_name depuis un channel_id, ou channel_id si erreur."""
+    try:
+        res = client.conversations_info(channel=channel_id)
+        return f"#{res['channel']['name']}"
+    except Exception:
+        return channel_id
+
 async def cmd_status(client: WebClient, channel_id: str):
     from incidents import list_incidents
-    
+    channel_name = _resolve_channel_name(client, channel_id)
     incidents = list_incidents()
-    incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
+    incident = next((i for i in incidents if i.get("slack_channel") in (channel_id, channel_name)), None)
     
     if not incident or not incident.get("linked_pod"):
         client.chat_postMessage(channel=channel_id, text="⚠️ Aucun pod lié à cet incident.")
@@ -300,9 +309,9 @@ async def cmd_status(client: WebClient, channel_id: str):
 async def cmd_resolve(client: WebClient, channel_id: str, user: str):
     """Ferme l'incident lié au canal."""
     from incidents import list_incidents, update_incident_status
-    
+    channel_name = _resolve_channel_name(client, channel_id)
     incidents = list_incidents()
-    incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
+    incident = next((i for i in incidents if i.get("slack_channel") in (channel_id, channel_name)), None)
     
     if not incident:
         client.chat_postMessage(channel=channel_id, text="⚠️ Aucun incident lié à ce canal.")
@@ -322,9 +331,9 @@ async def cmd_assign(client: WebClient, channel_id: str, text: str, user: str):
     """Réassigne l'incident à un membre."""
     from incidents import list_incidents
     import re
-    
+    channel_name = _resolve_channel_name(client, channel_id)
     incidents = list_incidents()
-    incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
+    incident = next((i for i in incidents if i.get("slack_channel") in (channel_id, channel_name)), None)
     
     if not incident:
         client.chat_postMessage(channel=channel_id, text="⚠️ Aucun incident lié à ce canal.")
@@ -347,9 +356,9 @@ async def cmd_assign(client: WebClient, channel_id: str, text: str, user: str):
 async def cmd_analyse(client: WebClient, channel_id: str):
     """Lance un diagnostic IA complet sur le pod lié."""
     from incidents import list_incidents
-    
+    channel_name = _resolve_channel_name(client, channel_id)
     incidents = list_incidents()
-    incident = next((i for i in incidents if i.get("slack_channel") == channel_id), None)
+    incident = next((i for i in incidents if i.get("slack_channel") in (channel_id, channel_name)), None)
     
     if not incident or not incident.get("linked_pod"):
         client.chat_postMessage(channel=channel_id, text="⚠️ Aucun pod lié à cet incident.")

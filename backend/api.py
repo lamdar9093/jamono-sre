@@ -28,7 +28,7 @@ from settings import get_all_settings, get_setting, update_settings, seed_defaul
 from monitor import start_auto_monitor, run_scan_and_create_incidents
 from slack_service import (
     create_incident_channel, post_incident_briefing,
-    post_status_update, handle_slack_event
+    post_status_update, handle_slack_event, get_slack_client
 )
 from team import add_member, list_members, delete_member, set_oncall, get_current_oncall
 from utils.k8s_handler import is_k8s_available
@@ -437,10 +437,11 @@ async def create_incident_endpoint(req: IncidentCreate):
             # Slack — créer canal si demandé
             if "slack" in requested_actions:
                 component = req.linked_pod or req.title[:20]
-                channel_id = create_incident_channel(incident["id"], component)
-                if channel_id:
-                    update_slack_channel(incident["id"], channel_id)
-                    incident["slack_channel"] = channel_id
+                result = create_incident_channel(incident["id"], component)
+                if result:
+                    channel_id, channel_name = result
+                    update_slack_channel(incident["id"], channel_name)
+                    incident["slack_channel"] = channel_name
                     post_incident_briefing(channel_id, incident)
 
             # Dispatch ciblé vers les intégrations demandées (Jira, Teams, etc.)
@@ -476,6 +477,18 @@ async def get_incident_endpoint(incident_id: int):
     incident = get_incident(incident_id)
     if not incident:
         raise HTTPException(status_code=404, detail="Incident introuvable")
+    # Résoudre le channel_id Slack en nom lisible si besoin (migration lazy)
+    ch = incident.get("slack_channel")
+    if ch and not ch.startswith("#"):
+        client = get_slack_client()
+        if client:
+            try:
+                res = client.conversations_info(channel=ch)
+                name = f"#{res['channel']['name']}"
+                update_slack_channel(incident_id, name)
+                incident["slack_channel"] = name
+            except Exception:
+                pass
     timeline = get_timeline(incident_id)
     return {"status": "success", "incident": incident, "timeline": timeline}
 
@@ -993,9 +1006,10 @@ async def notify_incident(incident_id: int, req: NotifyRequest):
             return {"status": "success", "message": "Notification Slack envoyée"}
         elif req.channel == "slack" and not incident.get("slack_channel"):
             component = incident.get("linked_pod") or incident["title"][:20]
-            channel_id = create_incident_channel(incident_id, component)
-            if channel_id:
-                update_slack_channel(incident_id, channel_id)
+            result = create_incident_channel(incident_id, component)
+            if result:
+                channel_id, channel_name = result
+                update_slack_channel(incident_id, channel_name)
                 post_incident_briefing(channel_id, incident)
                 return {"status": "success", "message": "Canal Slack créé"}
             raise HTTPException(status_code=400, detail="Échec création canal Slack")

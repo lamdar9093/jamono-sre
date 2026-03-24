@@ -6,7 +6,7 @@
 
 :root {
   /* ── Backgrounds ── */
-  --bg:    #FFFFFF;
+  --bg:    #F7F7F8;
   --s1:    #FFFFFF;
   --s2:    #F9F9F8;
   --s3:    #F3F3F1;
@@ -22,9 +22,9 @@
   --b3:    #D0D0CC;
 
   /* ── Text ── */
-  --t1:    #1A1A1A;
-  --t2:    #555555;
-  --t3:    #999999;
+  --t1:    #111111;
+  --t2:    #444444;
+  --t3:    #888888;
 
   /* ── Sidebar text ── */
   --st1:   #FFFFFF;
@@ -91,7 +91,7 @@ body {
   background: var(--bg);
   color: var(--t1);
   font-family: var(--f);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

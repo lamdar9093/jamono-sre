@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../config";
-import Modal, { formInput, FormField, FormActions } from "../components/Modal";
+import Modal from "../components/Modal";
 import KanbanBoard from "../components/KanbanBoard";
 
 interface Incident {
